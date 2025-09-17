@@ -1,0 +1,16 @@
+{
+  "attributeTypes": [
+    { "id": "text", "label": "Texte", "input": "textarea" },
+    { "id": "boolean", "label": "Booléen", "input": "checkbox" },
+    { "id": "date", "label": "Date", "input": "date" },
+    { "id": "link", "label": "Lien", "input": "link" },
+    { "id": "image", "label": "Image", "input": "image" }
+  ],
+  "defaultFolderAttributes": {},
+  "defaultMediaAttributes": {},
+  "ui": {
+    "theme": "dawn",
+    "accentColor": "#8c6b4f",
+    "paperColor": "#f5ede2"
+  }
+}
