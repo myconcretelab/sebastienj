@@ -13,6 +13,7 @@ export const METADATA_ROOT = process.env.METADATA_ROOT || path.join(PROJECT_ROOT
 export const FOLDER_META_FILE = path.join(METADATA_ROOT, '.dossier-meta.json');
 export const MEDIA_META_FILE = path.join(MEDIA_ROOT, '.media-meta.json');
 export const SETTINGS_FILE = path.join(METADATA_ROOT, 'settings.json');
+export const STATIC_PAGES_FILE = path.join(METADATA_ROOT, 'pages.json');
 
 export const THUMBNAILS_ROOT = process.env.THUMBNAILS_ROOT || path.join(PROJECT_ROOT, 'thumbnails');
 export const THUMBNAIL_CONFIG_FILE =

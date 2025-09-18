@@ -1,5 +1,5 @@
 import useSWR, { mutate } from 'swr';
-import { FolderNode, Orphans, Settings, ThumbnailSummary } from './types.js';
+import { FolderNode, Orphans, Settings, StaticPage, ThumbnailSummary } from './types.js';
 
 const fetcher = async (url: string) => {
   const response = await fetch(url);
@@ -13,6 +13,7 @@ export const useTree = () => useSWR<FolderNode>('/api/tree', fetcher, { suspense
 export const useSettings = () => useSWR<Settings>('/api/settings', fetcher);
 export const useOrphans = () => useSWR<Orphans>('/api/orphans', fetcher, { refreshInterval: 1000 * 60 });
 export const useThumbnails = () => useSWR<ThumbnailSummary>('/api/thumbnails', fetcher);
+export const useStaticPages = () => useSWR<StaticPage[]>('/api/static-pages', fetcher);
 
 const postJson = async (url: string, body: unknown, method: string = 'POST') => {
   const response = await fetch(url, {
@@ -83,5 +84,22 @@ export const api = {
   },
   async requestPreview(secret: string, folder?: string, media?: string) {
     return postJson('/api/previews', { secret, folder, media });
+  },
+  async refreshStaticPages() {
+    await mutate('/api/static-pages');
+  },
+  async createStaticPage(title?: string) {
+    const response = await postJson('/api/static-pages', title ? { title } : {}, 'POST');
+    await mutate('/api/static-pages');
+    return response as StaticPage;
+  },
+  async updateStaticPage(id: string, payload: Partial<Pick<StaticPage, 'title' | 'slug' | 'visible' | 'order' | 'sections'>>) {
+    const response = await postJson(`/api/static-pages/${id}`, payload, 'PUT');
+    await mutate('/api/static-pages');
+    return response as StaticPage;
+  },
+  async deleteStaticPage(id: string) {
+    await postJson(`/api/static-pages/${id}`, {}, 'DELETE');
+    await mutate('/api/static-pages');
   }
 };

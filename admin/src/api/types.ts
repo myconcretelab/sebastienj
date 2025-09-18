@@ -126,3 +126,25 @@ export type Orphans = {
     medias: string[];
   };
 };
+
+export type StaticPageColumn = {
+  id: string;
+  span: number;
+  content: string;
+};
+
+export type StaticPageSection = {
+  id: string;
+  columns: StaticPageColumn[];
+};
+
+export type StaticPage = {
+  id: string;
+  title: string;
+  slug: string;
+  visible: boolean;
+  order: number;
+  sections: StaticPageSection[];
+  createdAt: string;
+  updatedAt: string;
+};

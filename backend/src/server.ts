@@ -9,6 +9,7 @@ import type { Server } from 'http';
 import apiRouter from './routes/api.js';
 import mediaRouter from './routes/media.js';
 import { metadataStore } from './services/MetadataStore.js';
+import { staticPageStore } from './services/StaticPageStore.js';
 import { thumbnailService } from './services/ThumbnailService.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -63,6 +64,7 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 
 export const startServer = async (): Promise<Server> => {
   await metadataStore.ensureReady();
+  await staticPageStore.ensureReady();
   await thumbnailService.ensureReady();
   await nextApp.prepare();
 
