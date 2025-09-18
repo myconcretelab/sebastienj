@@ -1,0 +1,56 @@
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  position: sticky;
+  top: 7.5rem;
+}
+
+.home {
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  padding: 0.85rem 1.1rem 0.75rem;
+  align-self: flex-start;
+}
+
+.items {
+  display: flex;
+  flex-direction: column;
+  gap: 1.05rem;
+}
+
+.itemLink {
+  font-size: 1.05rem;
+  line-height: 1.4;
+  display: inline-block;
+}
+
+.itemWrapper {
+  display: flex;
+}
+
+.backLink {
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(0, 0, 0, 0.55);
+  margin-top: 0.25rem;
+}
+
+.backLink:hover {
+  color: rgba(0, 0, 0, 0.85);
+}
+
+.note {
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: rgba(0, 0, 0, 0.55);
+  max-width: 18rem;
+}
+
+@media (max-width: 900px) {
+  .stack {
+    position: static;
+  }
+}
