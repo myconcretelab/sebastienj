@@ -5,6 +5,7 @@ import { metadataStore } from '../services/MetadataStore.js';
 import { fileService } from '../services/FileService.js';
 import { cacheService } from '../services/CacheService.js';
 import { previewService } from '../services/PreviewService.js';
+import { staticPageStore } from '../services/StaticPageStore.js';
 import { thumbnailService } from '../services/ThumbnailService.js';
 import { thumbnailConfigSchema } from '../types/thumbnails.js';
 
@@ -190,6 +191,65 @@ router.delete('/medias', async (req, res, next) => {
     const { path } = mediaMetaSchema.pick({ path: true }).parse(req.body);
     await fileService.deleteMedia(path);
     cacheService.clear();
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+const staticPageSectionSchema = z.object({
+  id: z.string().optional(),
+  columns: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        span: z.number().int().min(1).max(12).optional(),
+        content: z.string().optional()
+      })
+    )
+    .min(1)
+});
+
+const staticPagePayloadSchema = z.object({
+  title: z.string().optional(),
+  slug: z.string().optional(),
+  visible: z.boolean().optional(),
+  order: z.number().int().min(0).optional(),
+  sections: z.array(staticPageSectionSchema).optional()
+});
+
+router.get('/static-pages', async (_req, res, next) => {
+  try {
+    const pages = await staticPageStore.list();
+    res.json(pages);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/static-pages', async (req, res, next) => {
+  try {
+    const payload = staticPagePayloadSchema.partial({ order: true }).parse(req.body ?? {});
+    const page = await staticPageStore.create(payload);
+    res.status(201).json(page);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put('/static-pages/:id', async (req, res, next) => {
+  try {
+    const payload = staticPagePayloadSchema.parse(req.body ?? {});
+    const page = await staticPageStore.update(req.params.id, payload);
+    res.json(page);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/static-pages/:id', async (req, res, next) => {
+  try {
+    await staticPageStore.delete(req.params.id);
     res.json({ success: true });
   } catch (error) {
     next(error);

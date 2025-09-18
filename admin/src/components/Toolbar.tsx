@@ -8,7 +8,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { MetadataSyncIndicator } from './MetadataSyncIndicator.js';
 
 interface Props {
-  onRefresh: () => void;
+  onRefresh?: () => void;
   onNewFolder?: () => void;
   canGoBack?: boolean;
   title?: string;
@@ -18,6 +18,7 @@ export const Toolbar: React.FC<Props> = ({ onRefresh, onNewFolder, canGoBack, ti
   const location = useLocation();
   const navigate = useNavigate();
   const inSettings = location.pathname === '/settings';
+  const inPages = location.pathname.startsWith('/pages');
 
   return (
     <AppBar
@@ -49,14 +50,32 @@ export const Toolbar: React.FC<Props> = ({ onRefresh, onNewFolder, canGoBack, ti
         </Stack>
         <Stack direction="row" alignItems="center" spacing={1}>
           <MetadataSyncIndicator />
-          <IconButton color="primary" onClick={onRefresh}>
-            <RefreshIcon />
-          </IconButton>
+          {onRefresh && (
+            <IconButton color="primary" onClick={onRefresh}>
+              <RefreshIcon />
+            </IconButton>
+          )}
           {onNewFolder && (
             <Button variant="outlined" onClick={onNewFolder} sx={{ borderStyle: 'dashed' }}>
               Nouveau dossier
             </Button>
           )}
+          <Button
+            component={Link}
+            to="/"
+            color="secondary"
+            variant={!inSettings && !inPages ? 'contained' : 'text'}
+          >
+            Studio
+          </Button>
+          <Button
+            component={Link}
+            to="/pages"
+            color="secondary"
+            variant={inPages ? 'contained' : 'text'}
+          >
+            Pages statiques
+          </Button>
           <Button
             component={Link}
             to={inSettings ? '/' : '/settings'}

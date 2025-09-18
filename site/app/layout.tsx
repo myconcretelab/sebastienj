@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Special_Elite } from "next/font/google";
 
+import { getVisibleStaticPages } from "@/lib/staticPages";
+
 import "./globals.css";
 
 const specialElite = Special_Elite({ subsets: ["latin"], weight: "400" });
@@ -12,11 +14,13 @@ export const metadata: Metadata = {
     "Une promenade poétique dans les peintures, dessins et photographies de l'atelier.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const staticPages = await getVisibleStaticPages();
+
   return (
     <html lang="fr">
       <body className={specialElite.className}>
@@ -30,6 +34,11 @@ export default function RootLayout({
           </div>
           <nav className="site-nav" aria-label="Navigation principale">
             <Link href="/">Explorer</Link>
+            {staticPages.map((page) => (
+              <Link key={page.id} href={`/pages/${page.slug}`}>
+                {page.title}
+              </Link>
+            ))}
             <a href="mailto:contact@atelier.example" rel="noreferrer">
               Écrire
             </a>
