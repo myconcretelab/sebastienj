@@ -1,0 +1,41 @@
+.grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.frame {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  background: linear-gradient(135deg, rgba(11, 74, 111, 0.12), rgba(192, 70, 60, 0.05));
+}
+
+.frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  mix-blend-mode: multiply;
+}
+
+.caption {
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.empty {
+  font-size: 0.95rem;
+  color: rgba(0, 0, 0, 0.55);
+  max-width: 32rem;
+}

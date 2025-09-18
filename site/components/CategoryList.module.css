@@ -1,0 +1,31 @@
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.paper {
+  font-size: clamp(1.05rem, 2vw, 1.25rem);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.paper span {
+  display: inline-block;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.35);
+  padding-bottom: 0.2rem;
+}
+
+@media (min-width: 720px) {
+  .list {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .paper {
+    min-width: clamp(12rem, 18vw, 16rem);
+  }
+}
