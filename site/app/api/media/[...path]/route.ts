@@ -4,31 +4,40 @@ import path from "path";
 import mime from "mime-types";
 
 const MEDIA_ROOT = path.resolve(process.cwd(), "..", "medias");
+const THUMBNAILS_ROOT = path.resolve(process.cwd(), "..", "thumbnails");
 
 export async function GET(
   _request: Request,
   { params }: { params: { path: string[] } }
 ) {
   const requestedSegments = params.path ?? [];
-  const targetPath = path.join(MEDIA_ROOT, ...requestedSegments);
-  const normalized = path.normalize(targetPath);
+  const [rootSegment, ...rest] = requestedSegments;
+  const isThumbnailRequest = rootSegment === "thumbnails";
+  const base = isThumbnailRequest ? THUMBNAILS_ROOT : MEDIA_ROOT;
+  const segments = isThumbnailRequest ? rest : requestedSegments;
 
-  if (!normalized.startsWith(MEDIA_ROOT)) {
+  if (segments.length === 0) {
     return new NextResponse("Not found", { status: 404 });
   }
 
   try {
-    const stats = await fs.stat(normalized);
+    const targetPath = path.resolve(base, ...segments);
+
+    if (!targetPath.startsWith(base)) {
+      return new NextResponse("Not found", { status: 404 });
+    }
+
+    const stats = await fs.stat(targetPath);
     if (!stats.isFile()) {
       return new NextResponse("Not found", { status: 404 });
     }
 
-    const file = await fs.readFile(normalized);
+    const file = await fs.readFile(targetPath);
     const arrayBuffer = file.buffer.slice(
       file.byteOffset,
       file.byteOffset + file.byteLength
     ) as ArrayBuffer;
-    const contentType = mime.lookup(normalized) || "application/octet-stream";
+    const contentType = mime.lookup(targetPath) || "application/octet-stream";
 
     return new NextResponse(arrayBuffer, {
       status: 200,

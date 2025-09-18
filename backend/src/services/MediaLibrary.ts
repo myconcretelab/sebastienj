@@ -33,6 +33,10 @@ export interface MediaLeaf extends MediaNodeBase {
   variants?: MediaMetadata['variants'];
   focalPoint?: MediaMetadata['focalPoint'];
   colorPalette?: string[];
+  width?: number;
+  height?: number;
+  orientation?: MediaMetadata['orientation'];
+  thumbnails?: MediaMetadata['thumbnails'];
 }
 
 export type LibraryTree = FolderNode;
@@ -117,7 +121,11 @@ export class MediaLibrary {
           mimeType: mime.lookup(entry.name) || false,
           variants: meta?.variants,
           focalPoint: meta?.focalPoint,
-          colorPalette: meta?.colorPalette
+          colorPalette: meta?.colorPalette,
+          width: meta?.width,
+          height: meta?.height,
+          orientation: meta?.orientation,
+          thumbnails: meta?.thumbnails
         };
         children.push(leaf);
       }

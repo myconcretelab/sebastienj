@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import clsx from "clsx";
+import Image from "next/image";
 
 import paperStyles from "./Paper.module.css";
 import styles from "./GalleryStack.module.css";
@@ -12,6 +13,12 @@ type GalleryItem = {
   mediaPath?: string;
   href?: string;
   hints?: string[];
+  image?: {
+    defaultPath: string;
+    width?: number;
+    height?: number;
+    sources: Array<{ format: string; path: string }>;
+  };
 };
 
 type GalleryStackProps = {
@@ -38,21 +45,49 @@ export function GalleryStack({ items }: GalleryStackProps) {
             layout
             whileHover={{ rotate: rotation * 0.6, y: -8 }}
             transition={{ type: "spring", stiffness: 180, damping: 18 }}
-          >
-            <a
-              className={clsx(paperStyles.base, paperStyles.gallery, paperStyles.stack, styles.card)}
-              href={linkHref}
-              {...linkProps}
             >
-              <div className={styles.frame}>
-                {item.mediaPath ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={`/api/media/${item.mediaPath}`} alt={item.label} loading="lazy" />
-                ) : (
-                  <div className={paperStyles.muted}>
-                    {item.hints?.slice(0, 3).join(" · ") ?? "Fragment à découvrir"}
-                  </div>
-                )}
+              <a
+                className={clsx(paperStyles.base, paperStyles.gallery, paperStyles.stack, styles.card)}
+                href={linkHref}
+                {...linkProps}
+              >
+                <div className={styles.frame}>
+                  {item.image ? (
+                    <picture>
+                      {item.image.sources.map((source) => (
+                        <source
+                          key={`${item.id}-${source.format}`}
+                          srcSet={`/api/media${source.path}`}
+                          type={`image/${source.format}`}
+                        />
+                      ))}
+                      <Image
+                        src={`/api/media${item.image.defaultPath}`}
+                        alt={item.label}
+                        width={item.image.width ?? 320}
+                        height={item.image.height ?? 240}
+                        className={styles.image}
+                        sizes="(max-width: 900px) 45vw, 320px"
+                        priority={index < 4}
+                        unoptimized
+                      />
+                    </picture>
+                  ) : item.mediaPath ? (
+                    <Image
+                      src={`/api/media/${item.mediaPath}`}
+                      alt={item.label}
+                      width={320}
+                      height={240}
+                      className={styles.image}
+                      sizes="(max-width: 900px) 45vw, 320px"
+                      priority={index < 4}
+                      unoptimized
+                    />
+                  ) : (
+                    <div className={paperStyles.muted}>
+                      {item.hints?.slice(0, 3).join(" · ") ?? "Fragment à découvrir"}
+                    </div>
+                  )}
               </div>
               <span className={styles.caption}>{item.label}</span>
             </a>

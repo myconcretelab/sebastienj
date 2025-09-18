@@ -11,8 +11,12 @@ export const MEDIA_ROOT = process.env.MEDIA_ROOT || path.join(PROJECT_ROOT, 'med
 export const METADATA_ROOT = process.env.METADATA_ROOT || path.join(PROJECT_ROOT, 'storage');
 
 export const FOLDER_META_FILE = path.join(METADATA_ROOT, '.dossier-meta.json');
-export const MEDIA_META_FILE = path.join(METADATA_ROOT, '.media-meta.json');
+export const MEDIA_META_FILE = path.join(MEDIA_ROOT, '.media-meta.json');
 export const SETTINGS_FILE = path.join(METADATA_ROOT, 'settings.json');
+
+export const THUMBNAILS_ROOT = process.env.THUMBNAILS_ROOT || path.join(PROJECT_ROOT, 'thumbnails');
+export const THUMBNAIL_CONFIG_FILE =
+  process.env.THUMBNAIL_CONFIG_FILE || path.join(PROJECT_ROOT, 'config', 'thumbnails.json');
 
 export const CACHE_TTL = Number(process.env.CACHE_TTL ?? 5_000);
 

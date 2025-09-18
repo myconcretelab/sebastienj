@@ -43,6 +43,7 @@ export class MetadataStore {
       await fs.writeFile(FOLDER_META_FILE, JSON.stringify({}, null, 2), 'utf-8');
     }
     if (!(await this.exists(MEDIA_META_FILE))) {
+      await fs.mkdir(path.dirname(MEDIA_META_FILE), { recursive: true });
       await fs.writeFile(MEDIA_META_FILE, JSON.stringify({}, null, 2), 'utf-8');
     }
     if (!(await this.exists(SETTINGS_FILE))) {

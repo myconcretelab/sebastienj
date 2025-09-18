@@ -1,5 +1,5 @@
 import useSWR, { mutate } from 'swr';
-import { FolderNode, Orphans, Settings } from './types.js';
+import { FolderNode, Orphans, Settings, ThumbnailSummary } from './types.js';
 
 const fetcher = async (url: string) => {
   const response = await fetch(url);
@@ -12,6 +12,7 @@ const fetcher = async (url: string) => {
 export const useTree = () => useSWR<FolderNode>('/api/tree', fetcher, { suspense: false });
 export const useSettings = () => useSWR<Settings>('/api/settings', fetcher);
 export const useOrphans = () => useSWR<Orphans>('/api/orphans', fetcher, { refreshInterval: 1000 * 60 });
+export const useThumbnails = () => useSWR<ThumbnailSummary>('/api/thumbnails', fetcher);
 
 const postJson = async (url: string, body: unknown, method: string = 'POST') => {
   const response = await fetch(url, {
@@ -69,6 +70,16 @@ export const api = {
   async updateSettings(settings: Settings) {
     await postJson('/api/settings', settings, 'PUT');
     await mutate('/api/settings');
+  },
+  async updateThumbnails(config: ThumbnailSummary['config']) {
+    await postJson('/api/thumbnails', config, 'PUT');
+    await mutate('/api/thumbnails');
+    await mutate('/api/tree');
+  },
+  async rebuildThumbnails() {
+    await postJson('/api/thumbnails/rebuild', {}, 'POST');
+    await mutate('/api/thumbnails');
+    await mutate('/api/tree');
   },
   async requestPreview(secret: string, folder?: string, media?: string) {
     return postJson('/api/previews', { secret, folder, media });

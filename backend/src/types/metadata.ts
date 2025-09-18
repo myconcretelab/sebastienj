@@ -32,6 +32,19 @@ export const mediaVariantSchema = z.object({
   size: z.number().optional()
 });
 
+export const mediaThumbnailSourceSchema = z.object({
+  format: z.string(),
+  path: z.string(),
+  size: z.number().optional()
+});
+
+export const mediaThumbnailSchema = z.object({
+  defaultPath: z.string(),
+  sources: z.array(mediaThumbnailSourceSchema).default([]),
+  width: z.number().optional(),
+  height: z.number().optional()
+});
+
 export const mediaMetadataSchema = z.object({
   title: z.string().optional(),
   description: z.string().optional(),
@@ -41,11 +54,17 @@ export const mediaMetadataSchema = z.object({
   visibility: z.enum(['public', 'private']).default('public'),
   focalPoint: z.object({ x: z.number(), y: z.number() }).optional(),
   colorPalette: z.array(z.string()).optional(),
+  width: z.number().optional(),
+  height: z.number().optional(),
+  orientation: z.enum(['horizontal', 'vertical', 'square']).optional(),
+  thumbnails: z.record(mediaThumbnailSchema).optional(),
   updatedAt: z.string().optional(),
   createdAt: z.string().optional()
 });
 
 export type MediaMetadata = z.infer<typeof mediaMetadataSchema>;
+export type MediaThumbnail = z.infer<typeof mediaThumbnailSchema>;
+export type MediaThumbnailSource = z.infer<typeof mediaThumbnailSourceSchema>;
 
 export type FolderMetadataRecord = Record<string, FolderMetadata>;
 export type MediaMetadataRecord = Record<string, MediaMetadata>;
