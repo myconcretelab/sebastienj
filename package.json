@@ -1,0 +1,18 @@
+{
+  "name": "mon-projet",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "admin",
+    "site"
+  ],
+  "scripts": {
+    "install": "npm run install:all",
+    "install:all": "npm --prefix backend install && npm --prefix admin install && npm --prefix site install",
+    "build": "npm --prefix backend run build && npm --prefix admin run build && npm --prefix site run build",
+    "dev": "concurrently --names backend,admin,site --prefix-colors magenta,cyan,green \"npm --prefix backend run start\" \"npm --prefix admin run dev\" \"npm --prefix site run dev\""
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

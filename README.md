@@ -3,12 +3,21 @@
 Ce dépôt contient une base complète pour un mini CMS personnel organisé autour de trois espaces :
 
 - `backend/` — serveur Node.js (Express + TypeScript) qui expose une API REST pour naviguer dans l'arborescence, gérer les métadonnées JSON et manipuler les fichiers du dossier `medias/`.
-- `frontend/` — interface React (Vite + Material UI) offrant une administration joyeuse avec explorateur hiérarchique, éditeurs dynamiques et page de réglages.
+- `admin/` — interface React (Vite + Material UI) offrant une administration joyeuse avec explorateur hiérarchique, éditeurs dynamiques et page de réglages.
 - `medias/` — racine des images/vidéos, directement synchronisée avec la structure disque.
 
 Les métadonnées sont stockées dans `storage/.dossier-meta.json`, `storage/.media-meta.json` et `storage/settings.json`. Les descriptions longues s'écrivent dans `description.md` situé dans chaque dossier média.
 
 ## Installation rapide
+
+```bash
+npm run install
+npm run dev
+```
+
+`npm run install` installe les dépendances des trois espaces (`backend`, `admin`, `site`) et `npm run dev` lance simultanément l'API Node.js ainsi que les deux interfaces (admin & site) en mode développement. Pour un build de production unifié, utilisez `npm run build` depuis la racine.
+
+### Installation manuelle (alternative)
 
 ```bash
 # Lancer l'API
@@ -17,7 +26,7 @@ npm install
 npm run dev
 
 # Lancer l'interface d'administration
-cd ../frontend
+cd ../admin
 npm install
 npm run dev
 ```
