@@ -5,6 +5,8 @@ import { metadataStore } from '../services/MetadataStore.js';
 import { fileService } from '../services/FileService.js';
 import { cacheService } from '../services/CacheService.js';
 import { previewService } from '../services/PreviewService.js';
+import { thumbnailService } from '../services/ThumbnailService.js';
+import { thumbnailConfigSchema } from '../types/thumbnails.js';
 
 const router = Router();
 
@@ -207,6 +209,36 @@ router.get('/settings', async (_req, res, next) => {
   try {
     const settings = await metadataStore.readSettings();
     res.json(settings);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/thumbnails', async (_req, res, next) => {
+  try {
+    const summary = await thumbnailService.getSummary();
+    res.json(summary);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put('/thumbnails', async (req, res, next) => {
+  try {
+    const config = thumbnailConfigSchema.parse(req.body);
+    await thumbnailService.updateConfig(config);
+    cacheService.clear();
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/thumbnails/rebuild', async (_req, res, next) => {
+  try {
+    await thumbnailService.rebuildAll();
+    cacheService.clear();
+    res.json({ success: true });
   } catch (error) {
     next(error);
   }

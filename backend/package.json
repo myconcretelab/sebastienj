@@ -16,6 +16,7 @@
     "gray-matter": "^4.0.3",
     "mime-types": "^2.1.35",
     "morgan": "^1.10.0",
+    "sharp": "^0.33.4",
     "zod": "^3.22.4"
   },
   "devDependencies": {

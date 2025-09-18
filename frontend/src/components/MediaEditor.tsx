@@ -42,6 +42,23 @@ export const MediaEditor: React.FC<Props> = ({ media, settings, onSaveMetadata, 
   const [previewSecret, setPreviewSecret] = useState('');
   const [previewToken, setPreviewToken] = useState<string | null>(null);
 
+  const orientationLabel =
+    media.orientation === 'horizontal'
+      ? 'Paysage'
+      : media.orientation === 'vertical'
+      ? 'Portrait'
+      : media.orientation === 'square'
+      ? 'Carré'
+      : undefined;
+
+  const formatBytes = (bytes: number) => {
+    if (!bytes) return '';
+    const units = ['o', 'Ko', 'Mo', 'Go'];
+    const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    const value = bytes / Math.pow(1024, exponent);
+    return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[exponent]}`;
+  };
+
   useEffect(() => {
     setTitle(media.title || '');
     setTags(media.tags?.join(', ') || '');
@@ -126,6 +143,10 @@ export const MediaEditor: React.FC<Props> = ({ media, settings, onSaveMetadata, 
         </Typography>
         <Stack direction="row" spacing={1} mt={1} flexWrap="wrap">
           <Chip label={media.mimeType || 'type inconnu'} size="small" />
+          {media.width && media.height && (
+            <Chip label={`${media.width}×${media.height}`} size="small" variant="outlined" />
+          )}
+          {orientationLabel && <Chip label={orientationLabel} size="small" variant="outlined" />}
           {media.variants?.map((variant) => (
             <Chip key={variant.path} label={`${variant.format}`} size="small" variant="outlined" />
           ))}
@@ -156,6 +177,50 @@ export const MediaEditor: React.FC<Props> = ({ media, settings, onSaveMetadata, 
       />
 
       <Divider sx={{ borderStyle: 'dashed' }} />
+
+      {media.thumbnails && Object.keys(media.thumbnails).length > 0 && (
+        <Box>
+          <Typography variant="subtitle1" sx={{ mb: 1 }}>
+            Miniatures générées
+          </Typography>
+          <Stack spacing={1.5}>
+            {Object.entries(media.thumbnails).map(([name, thumb]) => {
+              const totalSize = thumb.sources.reduce((sum, source) => sum + (source.size ?? 0), 0);
+              return (
+                <Stack
+                  key={name}
+                  direction={{ xs: 'column', md: 'row' }}
+                  spacing={1}
+                  alignItems={{ xs: 'flex-start', md: 'center' }}
+                >
+                  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                    <Chip label={name} color="primary" size="small" />
+                    {thumb.width && thumb.height && (
+                      <Chip label={`${thumb.width}×${thumb.height}`} size="small" variant="outlined" />
+                    )}
+                    {thumb.sources.map((source) => (
+                      <Chip
+                        key={`${name}-${source.format}`}
+                        label={source.format}
+                        size="small"
+                        variant="outlined"
+                      />
+                    ))}
+                    {totalSize > 0 && <Chip label={formatBytes(totalSize)} size="small" />}
+                  </Stack>
+                  <Typography variant="caption" color="text.secondary">
+                    {thumb.defaultPath}
+                  </Typography>
+                </Stack>
+              );
+            })}
+          </Stack>
+        </Box>
+      )}
+
+      {media.thumbnails && Object.keys(media.thumbnails).length > 0 && (
+        <Divider sx={{ borderStyle: 'dashed' }} />
+      )}
 
       <Box>
         <Typography variant="subtitle1" sx={{ mb: 1 }}>

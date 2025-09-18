@@ -21,6 +21,12 @@ type GalleryItem = {
   mediaPath?: string;
   href?: string;
   hints?: string[];
+  image?: {
+    defaultPath: string;
+    width?: number;
+    height?: number;
+    sources: Array<{ format: string; path: string }>;
+  };
 };
 
 type NavigationSceneProps = {

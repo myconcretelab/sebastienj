@@ -1,5 +1,12 @@
 import chokidar from 'chokidar';
-import { CACHE_TTL, FOLDER_META_FILE, MEDIA_META_FILE, MEDIA_ROOT, SETTINGS_FILE } from '../config.js';
+import {
+  CACHE_TTL,
+  FOLDER_META_FILE,
+  MEDIA_META_FILE,
+  MEDIA_ROOT,
+  SETTINGS_FILE,
+  THUMBNAIL_CONFIG_FILE
+} from '../config.js';
 import { metadataStore } from './MetadataStore.js';
 
 type CacheEntry<T> = {
@@ -12,10 +19,13 @@ export class CacheService {
   private watcher: chokidar.FSWatcher;
 
   constructor() {
-    this.watcher = chokidar.watch([MEDIA_ROOT, FOLDER_META_FILE, MEDIA_META_FILE, SETTINGS_FILE], {
-      ignoreInitial: true,
-      depth: 6
-    });
+    this.watcher = chokidar.watch(
+      [MEDIA_ROOT, FOLDER_META_FILE, MEDIA_META_FILE, SETTINGS_FILE, THUMBNAIL_CONFIG_FILE],
+      {
+        ignoreInitial: true,
+        depth: 6
+      }
+    );
 
     this.watcher.on('all', () => {
       this.clear();

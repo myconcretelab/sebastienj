@@ -7,6 +7,7 @@ import {
   getMediaTree,
   type MediaNode,
 } from "@/lib/mediaTree";
+import { getMediaMetadata } from "@/lib/mediaMetadata";
 
 type PageProps = {
   params: {
@@ -20,7 +21,7 @@ function isDescendant(parent: MediaNode, childName: string) {
 
 export default async function MediaPage({ params }: PageProps) {
   const slug = params.slug ?? [];
-  const tree = await getMediaTree();
+  const [tree, metadata] = await Promise.all([getMediaTree(), getMediaMetadata()]);
 
   if (slug.length > 0 && !isDescendant(tree, slug[0])) {
     notFound();
@@ -64,11 +65,33 @@ export default async function MediaPage({ params }: PageProps) {
         .map((item) => item.displayName),
     }));
 
-  const galleryItems = files.map((file) => ({
-    id: file.href,
-    label: file.displayName,
-    mediaPath: encodeForMediaPath(file.pathSegments),
-  }));
+  const galleryItems = files.map((file) => {
+    const key = file.pathSegments.join("/");
+    const meta = metadata[key];
+    const thumbnails = meta?.thumbnails;
+    const thumbEntry =
+      thumbnails?.thumb ?? thumbnails?.medium ?? (thumbnails ? Object.values(thumbnails)[0] : undefined);
+    const image = thumbEntry
+      ? {
+          defaultPath: thumbEntry.defaultPath,
+          width: thumbEntry.width,
+          height: thumbEntry.height,
+          sources: thumbEntry.sources.map((source) => ({ format: source.format, path: source.path })),
+        }
+      : undefined;
+    const originalPath = encodeForMediaPath(file.pathSegments);
+    const fullPath = thumbnails?.full?.defaultPath
+      ? `/api/media${thumbnails.full.defaultPath}`
+      : `/api/media/${originalPath}`;
+
+    return {
+      id: file.href,
+      label: file.displayName,
+      mediaPath: originalPath,
+      href: fullPath,
+      image,
+    };
+  });
 
   const categoryItems = directories.map((dir) => ({
     label: dir.displayName,
