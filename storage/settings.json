@@ -11,6 +11,15 @@
   "ui": {
     "theme": "dawn",
     "accentColor": "#8c6b4f",
-    "paperColor": "#f5ede2"
+    "paperColor": "#f5ede2",
+    "lightbox": {
+      "overlayColor": "#ffffff",
+      "overlayOpacity": 0.92,
+      "overlayBlur": 16,
+      "backgroundColor": "#f8f4ef",
+      "borderRadius": 22,
+      "maxWidth": 980,
+      "padding": 32
+    }
   }
 }

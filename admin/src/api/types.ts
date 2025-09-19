@@ -93,6 +93,15 @@ export type Settings = {
       duration: number;
       easing: string;
     };
+    lightbox: {
+      overlayColor: string;
+      overlayOpacity: number;
+      overlayBlur: number;
+      backgroundColor: string;
+      borderRadius: number;
+      maxWidth: number;
+      padding: number;
+    };
   };
   previews: {
     enabled: boolean;
