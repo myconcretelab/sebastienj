@@ -9,6 +9,7 @@ import { MediaGrid } from '../components/MediaGrid.js';
 import { MediaEditor } from '../components/MediaEditor.js';
 import { SettingsPage } from './SettingsPage.js';
 import { StaticPagesPage } from './StaticPagesPage.js';
+import { BlogPage } from './BlogPage.js';
 import { SelectionProvider, useSelection } from '../state/SelectionContext.js';
 import { FolderNode, MediaNode, Settings } from '../api/types.js';
 
@@ -129,6 +130,7 @@ const AppRoutes: React.FC = () => {
       <Route path="/" element={<AdminView tree={tree} settings={settings} />} />
       <Route path="/pages" element={<StaticPagesPage />} />
       <Route path="/settings" element={<SettingsPage settings={settings} />} />
+      <Route path="/blog" element={<BlogPage />} />
     </Routes>
   );
 };

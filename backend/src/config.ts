@@ -14,6 +14,9 @@ export const FOLDER_META_FILE = path.join(METADATA_ROOT, '.dossier-meta.json');
 export const MEDIA_META_FILE = path.join(MEDIA_ROOT, '.media-meta.json');
 export const SETTINGS_FILE = path.join(METADATA_ROOT, 'settings.json');
 export const STATIC_PAGES_FILE = path.join(METADATA_ROOT, 'pages.json');
+export const BLOG_ROOT = path.join(METADATA_ROOT, 'blog');
+export const BLOG_ARTICLES_FILE = path.join(BLOG_ROOT, 'articles.json');
+export const BLOG_SETTINGS_FILE = path.join(BLOG_ROOT, 'settings.json');
 
 export const THUMBNAILS_ROOT = process.env.THUMBNAILS_ROOT || path.join(PROJECT_ROOT, 'thumbnails');
 export const THUMBNAIL_CONFIG_FILE =

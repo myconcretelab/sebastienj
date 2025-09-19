@@ -5,6 +5,7 @@ import { Special_Elite } from "next/font/google";
 import { LightboxProvider } from "@/components/LightboxProvider";
 import { getVisibleStaticPages } from "@/lib/staticPages";
 import { getSettings } from "@/lib/settings";
+import { getBlogSettings } from "@/lib/blog";
 
 import "./globals.css";
 
@@ -21,8 +22,14 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const staticPages = await getVisibleStaticPages();
-  const settings = await getSettings();
+  const [staticPages, settings, blogSettings] = await Promise.all([
+    getVisibleStaticPages(),
+    getSettings(),
+    getBlogSettings(),
+  ]);
+
+  const blogListHref = `/${blogSettings.listPath}`;
+  const blogNavLabel = blogSettings.heroTitle || "Actualités";
 
   return (
     <html lang="fr">
@@ -38,6 +45,7 @@ export default async function RootLayout({
             </div>
             <nav className="site-nav" aria-label="Navigation principale">
               <Link href="/">Explorer</Link>
+              <Link href={blogListHref}>{blogNavLabel}</Link>
               {staticPages.map((page) => (
                 <Link key={page.id} href={`/pages/${page.slug}`}>
                   {page.title}

@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 
 import { NavigationScene } from "@/components/NavigationScene";
+import { BlogArticleView } from "@/components/blog/BlogArticleView";
+import { BlogList } from "@/components/blog/BlogList";
 import {
   encodeForMediaPath,
   findNodeByPath,
@@ -8,28 +10,95 @@ import {
   type MediaNode,
 } from "@/lib/mediaTree";
 import { getMediaMetadata } from "@/lib/mediaMetadata";
+import { getBlogArticleBySlug, getBlogArticles, getBlogSettings } from "@/lib/blog";
 
 type PageProps = {
   params: {
     slug?: string[];
   };
+  searchParams?: Record<string, string | string[] | undefined>;
 };
 
 function isDescendant(parent: MediaNode, childName: string) {
   return parent.children.some((child) => child.name === childName);
 }
 
-export default async function MediaPage({ params }: PageProps) {
-  const slug = params.slug ?? [];
-  const [tree, metadata] = await Promise.all([getMediaTree(), getMediaMetadata()]);
+function splitPath(value: string): string[] {
+  return value
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+}
 
-  if (slug.length > 0 && !isDescendant(tree, slug[0])) {
+function matchesSegments(input: string[], target: string[]): boolean {
+  if (target.length === 0) return false;
+  if (input.length < target.length) return false;
+  for (let index = 0; index < target.length; index += 1) {
+    if (input[index] !== target[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export default async function MediaPage({ params, searchParams }: PageProps) {
+  const slugSegments = params.slug ?? [];
+  const blogSettings = await getBlogSettings();
+  const listSegments = splitPath(blogSettings.listPath);
+  const articleSegments = splitPath(blogSettings.articleBasePath);
+
+  if (listSegments.length > 0 && slugSegments.length === listSegments.length && matchesSegments(slugSegments, listSegments)) {
+    const articles = await getBlogArticles();
+    const selectedCategory = typeof searchParams?.categorie === "string" ? searchParams.categorie : undefined;
+    const query = typeof searchParams?.q === "string" ? searchParams.q : undefined;
+
+    return (
+      <BlogList
+        articles={articles}
+        selectedCategory={selectedCategory}
+        query={query}
+        listPath={blogSettings.listPath}
+        articleBasePath={blogSettings.articleBasePath}
+        settings={blogSettings}
+      />
+    );
+  }
+
+  if (articleSegments.length > 0 && matchesSegments(slugSegments, articleSegments)) {
     notFound();
   }
 
-  const { selection, current } = findNodeByPath(tree, slug);
+  if (articleSegments.length > 0 && slugSegments.length > articleSegments.length && matchesSegments(slugSegments, articleSegments)) {
+    const articleSlug = slugSegments.slice(articleSegments.length).join("/");
+    const articles = await getBlogArticles();
+    const article = articles.find((entry) => entry.slug === articleSlug) ?? (await getBlogArticleBySlug(articleSlug));
 
-  if (slug.length > selection.length) {
+    if (!article) {
+      notFound();
+    }
+
+    const categories = new Set<string>();
+    articles.forEach((entry) => entry.categories.forEach((category) => categories.add(category)));
+
+    return (
+      <BlogArticleView
+        article={article}
+        listPath={blogSettings.listPath}
+        availableCategories={Array.from(categories)}
+        settings={blogSettings}
+      />
+    );
+  }
+
+  const [tree, metadata] = await Promise.all([getMediaTree(), getMediaMetadata()]);
+
+  if (slugSegments.length > 0 && !isDescendant(tree, slugSegments[0])) {
+    notFound();
+  }
+
+  const { selection, current } = findNodeByPath(tree, slugSegments);
+
+  if (slugSegments.length > selection.length) {
     notFound();
   }
 
@@ -127,7 +196,7 @@ export default async function MediaPage({ params }: PageProps) {
       galleryItems={galleryItems}
       rootPreview={rootPreview}
       backHref={parentNode ? parentNode.href : null}
-      pathKey={slug.join("/")}
+      pathKey={slugSegments.join("/")}
     />
   );
 }
