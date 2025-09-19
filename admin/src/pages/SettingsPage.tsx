@@ -126,6 +126,158 @@ export const SettingsPage: React.FC<Props> = ({ settings }) => {
                   />
                 </Grid>
               </Grid>
+              <Divider sx={{ my: 3 }} />
+              <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+                Lightbox
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Couleur de l'overlay"
+                    type="color"
+                    value={draft.ui.lightbox.overlayColor}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        ui: {
+                          ...draft.ui,
+                          lightbox: { ...draft.ui.lightbox, overlayColor: event.target.value }
+                        }
+                      })
+                    }
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Opacité de l'overlay"
+                    type="number"
+                    value={draft.ui.lightbox.overlayOpacity}
+                    inputProps={{ min: 0, max: 1, step: 0.05 }}
+                    onChange={(event) => {
+                      const value = Number(event.target.value);
+                      setDraft({
+                        ...draft,
+                        ui: {
+                          ...draft.ui,
+                          lightbox: {
+                            ...draft.ui.lightbox,
+                            overlayOpacity: Number.isNaN(value)
+                              ? draft.ui.lightbox.overlayOpacity
+                              : value
+                          }
+                        }
+                      });
+                    }}
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Flou de l'overlay (px)"
+                    type="number"
+                    value={draft.ui.lightbox.overlayBlur}
+                    inputProps={{ min: 0, max: 96, step: 1 }}
+                    onChange={(event) => {
+                      const value = Number(event.target.value);
+                      setDraft({
+                        ...draft,
+                        ui: {
+                          ...draft.ui,
+                          lightbox: {
+                            ...draft.ui.lightbox,
+                            overlayBlur: Number.isNaN(value) ? draft.ui.lightbox.overlayBlur : value
+                          }
+                        }
+                      });
+                    }}
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Fond de la carte"
+                    type="color"
+                    value={draft.ui.lightbox.backgroundColor}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        ui: {
+                          ...draft.ui,
+                          lightbox: { ...draft.ui.lightbox, backgroundColor: event.target.value }
+                        }
+                      })
+                    }
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Rayon des bords (px)"
+                    type="number"
+                    value={draft.ui.lightbox.borderRadius}
+                    inputProps={{ min: 0, max: 96, step: 1 }}
+                    onChange={(event) => {
+                      const value = Number(event.target.value);
+                      setDraft({
+                        ...draft,
+                        ui: {
+                          ...draft.ui,
+                          lightbox: {
+                            ...draft.ui.lightbox,
+                            borderRadius: Number.isNaN(value) ? draft.ui.lightbox.borderRadius : value
+                          }
+                        }
+                      });
+                    }}
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Largeur maximale (px)"
+                    type="number"
+                    value={draft.ui.lightbox.maxWidth}
+                    inputProps={{ min: 240, max: 2000, step: 10 }}
+                    onChange={(event) => {
+                      const value = Number(event.target.value);
+                      setDraft({
+                        ...draft,
+                        ui: {
+                          ...draft.ui,
+                          lightbox: {
+                            ...draft.ui.lightbox,
+                            maxWidth: Number.isNaN(value) ? draft.ui.lightbox.maxWidth : value
+                          }
+                        }
+                      });
+                    }}
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Marge intérieure (px)"
+                    type="number"
+                    value={draft.ui.lightbox.padding}
+                    inputProps={{ min: 12, max: 160, step: 1 }}
+                    onChange={(event) => {
+                      const value = Number(event.target.value);
+                      setDraft({
+                        ...draft,
+                        ui: {
+                          ...draft.ui,
+                          lightbox: {
+                            ...draft.ui.lightbox,
+                            padding: Number.isNaN(value) ? draft.ui.lightbox.padding : value
+                          }
+                        }
+                      });
+                    }}
+                    fullWidth
+                  />
+                </Grid>
+              </Grid>
             </CardContent>
           </Card>
 

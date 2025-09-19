@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import clsx from "clsx";
 
 import { CategoryList } from "./CategoryList";
-import { GalleryStack } from "./GalleryStack";
+import { GalleryStack, type GalleryItem } from "./GalleryStack";
 import { SelectionStack } from "./SelectionStack";
 import styles from "./NavigationScene.module.css";
 
@@ -14,20 +14,6 @@ type StackItem = {
 };
 
 type CategoryItem = StackItem;
-
-type GalleryItem = {
-  id: string;
-  label: string;
-  mediaPath?: string;
-  href?: string;
-  hints?: string[];
-  image?: {
-    defaultPath: string;
-    width?: number;
-    height?: number;
-    sources: Array<{ format: string; path: string }>;
-  };
-};
 
 type NavigationSceneProps = {
   root: StackItem;

@@ -92,9 +92,42 @@ export const settingsSchema = z.object({
           duration: z.number().default(240),
           easing: z.string().default('ease-in-out')
         })
-        .default({ duration: 240, easing: 'ease-in-out' })
+        .default({ duration: 240, easing: 'ease-in-out' }),
+      lightbox: z
+        .object({
+          overlayColor: z.string().default('#ffffff'),
+          overlayOpacity: z.number().min(0).max(1).default(0.92),
+          overlayBlur: z.number().min(0).max(96).default(16),
+          backgroundColor: z.string().default('#f8f4ef'),
+          borderRadius: z.number().min(0).max(96).default(22),
+          maxWidth: z.number().min(240).max(2000).default(980),
+          padding: z.number().min(12).max(160).default(32)
+        })
+        .default({
+          overlayColor: '#ffffff',
+          overlayOpacity: 0.92,
+          overlayBlur: 16,
+          backgroundColor: '#f8f4ef',
+          borderRadius: 22,
+          maxWidth: 980,
+          padding: 32
+        })
     })
-    .default({ theme: 'dawn', accentColor: '#8c6b4f', paperColor: '#f5ede2' }),
+    .default({
+      theme: 'dawn',
+      accentColor: '#8c6b4f',
+      paperColor: '#f5ede2',
+      animation: { duration: 240, easing: 'ease-in-out' },
+      lightbox: {
+        overlayColor: '#ffffff',
+        overlayOpacity: 0.92,
+        overlayBlur: 16,
+        backgroundColor: '#f8f4ef',
+        borderRadius: 22,
+        maxWidth: 980,
+        padding: 32
+      }
+    }),
   previews: z
     .object({
       enabled: z.boolean().default(true),

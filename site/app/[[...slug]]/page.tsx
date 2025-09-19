@@ -80,9 +80,16 @@ export default async function MediaPage({ params }: PageProps) {
         }
       : undefined;
     const originalPath = encodeForMediaPath(file.pathSegments);
-    const fullPath = thumbnails?.full?.defaultPath
-      ? `/api/media${thumbnails.full.defaultPath}`
-      : `/api/media/${originalPath}`;
+    const fullEntry = thumbnails?.full;
+    const fullImage = fullEntry
+      ? {
+          defaultPath: fullEntry.defaultPath,
+          width: fullEntry.width ?? meta?.width,
+          height: fullEntry.height ?? meta?.height,
+          sources: fullEntry.sources.map((source) => ({ format: source.format, path: source.path })),
+        }
+      : undefined;
+    const fullPath = fullEntry?.defaultPath ? `/api/media${fullEntry.defaultPath}` : `/api/media/${originalPath}`;
 
     return {
       id: file.href,
@@ -90,6 +97,18 @@ export default async function MediaPage({ params }: PageProps) {
       mediaPath: originalPath,
       href: fullPath,
       image,
+      fullImage,
+      description: meta?.description,
+      attributes: meta?.attributes,
+      tags: meta?.tags,
+      meta: meta
+        ? {
+            width: meta.width,
+            height: meta.height,
+            orientation: meta.orientation,
+            createdAt: meta.createdAt,
+          }
+        : undefined,
     };
   });
 
