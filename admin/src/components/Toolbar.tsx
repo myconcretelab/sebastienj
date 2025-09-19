@@ -19,6 +19,7 @@ export const Toolbar: React.FC<Props> = ({ onRefresh, onNewFolder, canGoBack, ti
   const navigate = useNavigate();
   const inSettings = location.pathname === '/settings';
   const inPages = location.pathname.startsWith('/pages');
+  const inBlog = location.pathname.startsWith('/blog');
 
   return (
     <AppBar
@@ -64,9 +65,17 @@ export const Toolbar: React.FC<Props> = ({ onRefresh, onNewFolder, canGoBack, ti
             component={Link}
             to="/"
             color="secondary"
-            variant={!inSettings && !inPages ? 'contained' : 'text'}
+            variant={!inSettings && !inPages && !inBlog ? 'contained' : 'text'}
           >
             Studio
+          </Button>
+          <Button
+            component={Link}
+            to="/blog"
+            color="secondary"
+            variant={inBlog ? 'contained' : 'text'}
+          >
+            Blog
           </Button>
           <Button
             component={Link}

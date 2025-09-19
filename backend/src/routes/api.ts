@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { z } from 'zod';
 import { mediaLibrary } from '../services/MediaLibrary.js';
 import { metadataStore } from '../services/MetadataStore.js';
@@ -8,8 +9,16 @@ import { previewService } from '../services/PreviewService.js';
 import { staticPageStore } from '../services/StaticPageStore.js';
 import { thumbnailService } from '../services/ThumbnailService.js';
 import { thumbnailConfigSchema } from '../types/thumbnails.js';
+import { blogService } from '../services/BlogService.js';
 
 const router = Router();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 25 * 1024 * 1024,
+    files: 10
+  }
+});
 
 router.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -41,6 +50,38 @@ router.get('/folders', async (req, res, next) => {
 const folderMetaSchema = z.object({
   path: z.string(),
   metadata: z.any()
+});
+
+const blogImageInputSchema = z.object({
+  path: z.string(),
+  previewPath: z.string().optional(),
+  width: z.number().int().positive().optional(),
+  height: z.number().int().positive().optional()
+});
+
+const blogArticleInputSchema = z.object({
+  title: z.string().min(1),
+  content: z.string().optional(),
+  author: z.string().optional(),
+  slug: z.string().optional(),
+  date: z.string().optional(),
+  categories: z.array(z.string()).optional(),
+  images: z.array(z.string()).optional(),
+  coverImage: blogImageInputSchema.nullish(),
+  excerpt: z.string().optional()
+});
+
+const blogArticleUpdateSchema = blogArticleInputSchema.partial();
+
+const blogSettingsInputSchema = z.object({
+  inboundAddress: z.string().email().or(z.literal('')).optional(),
+  mailgunSigningKey: z.string().min(1).or(z.literal('')).optional(),
+  allowedSenders: z.union([z.array(z.string()), z.string()]).optional(),
+  listPath: z.string().optional(),
+  articleBasePath: z.string().optional(),
+  autoPublish: z.boolean().optional(),
+  heroTitle: z.string().optional(),
+  heroSubtitle: z.string().optional()
 });
 
 router.put('/folders/meta', async (req, res, next) => {
@@ -192,6 +233,175 @@ router.delete('/medias', async (req, res, next) => {
     await fileService.deleteMedia(path);
     cacheService.clear();
     res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/blog/articles', async (_req, res, next) => {
+  try {
+    const articles = await blogService.listArticles();
+    res.json(articles);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/blog/articles/:slug', async (req, res, next) => {
+  try {
+    const article = await blogService.getArticle(req.params.slug);
+    if (!article) {
+      res.status(404).json({ error: 'Article introuvable' });
+      return;
+    }
+    res.json(article);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/blog/articles', async (req, res, next) => {
+  try {
+    const payload = blogArticleInputSchema.parse(req.body ?? {});
+    const article = await blogService.createArticle({
+      title: payload.title,
+      content: payload.content ?? '',
+      author: payload.author ?? '',
+      slug: payload.slug,
+      date: payload.date,
+      categories: payload.categories,
+      images: payload.images,
+      coverImage: payload.coverImage ?? undefined,
+      excerpt: payload.excerpt
+    });
+    res.status(201).json(article);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put('/blog/articles/:slug', async (req, res, next) => {
+  try {
+    const payload = blogArticleUpdateSchema.parse(req.body ?? {});
+    const article = await blogService.updateArticle(req.params.slug, {
+      title: payload.title,
+      content: payload.content,
+      author: payload.author,
+      slug: payload.slug,
+      date: payload.date,
+      categories: payload.categories,
+      images: payload.images,
+      coverImage: payload.coverImage === null ? null : payload.coverImage ?? undefined,
+      excerpt: payload.excerpt
+    });
+    res.json(article);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/blog/articles/:slug', async (req, res, next) => {
+  try {
+    await blogService.deleteArticle(req.params.slug);
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/blog/images', upload.single('file'), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: 'Aucun fichier fourni' });
+      return;
+    }
+    const saved = await blogService.uploadImage(req.file);
+    res.status(201).json(saved);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/blog/settings', async (_req, res, next) => {
+  try {
+    const settings = await blogService.getSettings();
+    res.json(settings);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.put('/blog/settings', async (req, res, next) => {
+  try {
+    const payload = blogSettingsInputSchema.parse(req.body ?? {});
+    const updates: Partial<Awaited<ReturnType<typeof blogService.getSettings>>> = {};
+
+    if (payload.inboundAddress !== undefined) {
+      const trimmed = payload.inboundAddress.trim();
+      updates.inboundAddress = trimmed ? trimmed : undefined;
+    }
+
+    if (payload.mailgunSigningKey !== undefined) {
+      const trimmed = payload.mailgunSigningKey.trim();
+      updates.mailgunSigningKey = trimmed ? trimmed : undefined;
+    }
+
+    if (payload.allowedSenders !== undefined) {
+      const entries = Array.isArray(payload.allowedSenders)
+        ? payload.allowedSenders
+        : payload.allowedSenders.split(/[,;\n]+/g);
+      updates.allowedSenders = entries;
+    }
+
+    if (payload.listPath !== undefined) {
+      updates.listPath = payload.listPath;
+    }
+
+    if (payload.articleBasePath !== undefined) {
+      updates.articleBasePath = payload.articleBasePath;
+    }
+
+    if (payload.autoPublish !== undefined) {
+      updates.autoPublish = payload.autoPublish;
+    }
+
+    if (payload.heroTitle !== undefined) {
+      updates.heroTitle = payload.heroTitle?.trim();
+    }
+
+    if (payload.heroSubtitle !== undefined) {
+      updates.heroSubtitle = payload.heroSubtitle?.trim();
+    }
+
+    const settings = await blogService.updateSettings(updates);
+    res.json(settings);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/blog/email', upload.any(), async (req, res, next) => {
+  try {
+    const timestamp = req.header('x-mailgun-timestamp') || (req.body?.timestamp as string | undefined);
+    const token = req.header('x-mailgun-token') || (req.body?.token as string | undefined);
+    const signature = req.header('x-mailgun-signature') || (req.body?.signature as string | undefined);
+    const bodyEntries = Object.entries(req.body ?? {}).reduce<Record<string, string | string[]>>((acc, [key, value]) => {
+      if (Array.isArray(value)) {
+        acc[key] = value.map((item) => (typeof item === 'string' ? item : String(item)));
+      } else if (typeof value === 'string') {
+        acc[key] = value;
+      }
+      return acc;
+    }, {});
+    const attachments = (req.files as Express.Multer.File[]) ?? [];
+    const article = await blogService.createArticleFromMailgun({
+      timestamp,
+      token,
+      signature,
+      body: bodyEntries,
+      attachments
+    });
+    res.status(201).json(article);
   } catch (error) {
     next(error);
   }

@@ -1,5 +1,14 @@
 import useSWR, { mutate } from 'swr';
-import { FolderNode, Orphans, Settings, StaticPage, ThumbnailSummary } from './types.js';
+import {
+  BlogArticle,
+  BlogImageUploadResponse,
+  BlogSettings,
+  FolderNode,
+  Orphans,
+  Settings,
+  StaticPage,
+  ThumbnailSummary
+} from './types.js';
 
 const fetcher = async (url: string) => {
   const response = await fetch(url);
@@ -14,6 +23,8 @@ export const useSettings = () => useSWR<Settings>('/api/settings', fetcher);
 export const useOrphans = () => useSWR<Orphans>('/api/orphans', fetcher, { refreshInterval: 1000 * 60 });
 export const useThumbnails = () => useSWR<ThumbnailSummary>('/api/thumbnails', fetcher);
 export const useStaticPages = () => useSWR<StaticPage[]>('/api/static-pages', fetcher);
+export const useBlogArticles = () => useSWR<BlogArticle[]>('/api/blog/articles', fetcher);
+export const useBlogSettings = () => useSWR<BlogSettings>('/api/blog/settings', fetcher);
 
 const postJson = async (url: string, body: unknown, method: string = 'POST') => {
   const response = await fetch(url, {
@@ -101,5 +112,39 @@ export const api = {
   async deleteStaticPage(id: string) {
     await postJson(`/api/static-pages/${id}`, {}, 'DELETE');
     await mutate('/api/static-pages');
+  },
+  async createBlogArticle(payload: Partial<Pick<BlogArticle, 'title' | 'content' | 'author' | 'slug' | 'date' | 'categories' | 'images' | 'coverImage' | 'excerpt'>>) {
+    const response = await postJson('/api/blog/articles', payload);
+    await mutate('/api/blog/articles');
+    return response as BlogArticle;
+  },
+  async updateBlogArticle(slug: string, payload: Partial<Pick<BlogArticle, 'title' | 'content' | 'author' | 'slug' | 'date' | 'categories' | 'images' | 'coverImage' | 'excerpt'>>) {
+    const response = await postJson(`/api/blog/articles/${slug}`, payload, 'PUT');
+    await mutate('/api/blog/articles');
+    return response as BlogArticle;
+  },
+  async deleteBlogArticle(slug: string) {
+    await postJson(`/api/blog/articles/${slug}`, {}, 'DELETE');
+    await mutate('/api/blog/articles');
+  },
+  async uploadBlogImage(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch('/api/blog/images', {
+      method: 'POST',
+      body: formData
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || 'Erreur lors du téléversement');
+    }
+    const result = (await response.json()) as BlogImageUploadResponse;
+    await mutate('/api/blog/articles');
+    return result;
+  },
+  async updateBlogSettings(payload: Partial<BlogSettings>) {
+    const response = await postJson('/api/blog/settings', payload, 'PUT');
+    await mutate('/api/blog/settings');
+    return response as BlogSettings;
   }
 };

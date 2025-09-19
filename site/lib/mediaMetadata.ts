@@ -2,6 +2,8 @@ import { cache } from "react";
 import fs from "fs/promises";
 import path from "path";
 
+import type { AttributeRecord } from "@/types/metadata";
+
 type ThumbnailSource = {
   format: string;
   path: string;
@@ -20,6 +22,10 @@ export type MediaMetadata = {
   height?: number;
   orientation?: "horizontal" | "vertical" | "square";
   thumbnails?: Record<string, ThumbnailEntry>;
+  description?: string;
+  attributes?: AttributeRecord;
+  tags?: string[];
+  createdAt?: string;
 };
 
 export type MediaMetadataRecord = Record<string, MediaMetadata>;
