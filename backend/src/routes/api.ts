@@ -8,6 +8,8 @@ import { cacheService } from '../services/CacheService.js';
 import { previewService } from '../services/PreviewService.js';
 import { staticPageStore } from '../services/StaticPageStore.js';
 import { thumbnailService } from '../services/ThumbnailService.js';
+import { requireAuth } from '../middleware/auth.js';
+import type { Settings } from '../types/metadata.js';
 import { thumbnailConfigSchema } from '../types/thumbnails.js';
 import { blogService } from '../services/BlogService.js';
 
@@ -20,9 +22,53 @@ const upload = multer({
   }
 });
 
+const sanitizeSettings = (settings: Settings): Omit<Settings, 'security'> => {
+  const { security: _security, ...rest } = settings;
+  return rest;
+};
+
 router.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+router.post('/blog/email', upload.any(), async (req, res, next) => {
+  try {
+    const timestamp = req.header('x-mailgun-timestamp') || (req.body?.timestamp as string | undefined);
+    const token = req.header('x-mailgun-token') || (req.body?.token as string | undefined);
+    const signature = req.header('x-mailgun-signature') || (req.body?.signature as string | undefined);
+    const bodyEntries = Object.entries(req.body ?? {}).reduce<Record<string, string | string[]>>((acc, [key, value]) => {
+      if (Array.isArray(value)) {
+        acc[key] = value.map((item) => (typeof item === 'string' ? item : String(item)));
+      } else if (typeof value === 'string') {
+        acc[key] = value;
+      }
+      return acc;
+    }, {});
+    const attachments = (req.files as Express.Multer.File[]) ?? [];
+    const article = await blogService.createArticleFromMailgun({
+      timestamp,
+      token,
+      signature,
+      body: bodyEntries,
+      attachments
+    });
+    res.status(201).json(article);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get('/sitemap', async (req, res, next) => {
+  try {
+    const baseUrl = (req.query.baseUrl as string) || 'https://example.com';
+    const xml = await mediaLibrary.sitemap(baseUrl);
+    res.type('application/xml').send(xml);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.use(requireAuth);
 
 router.get('/tree', async (_req, res, next) => {
   try {
@@ -380,33 +426,6 @@ router.put('/blog/settings', async (req, res, next) => {
   }
 });
 
-router.post('/blog/email', upload.any(), async (req, res, next) => {
-  try {
-    const timestamp = req.header('x-mailgun-timestamp') || (req.body?.timestamp as string | undefined);
-    const token = req.header('x-mailgun-token') || (req.body?.token as string | undefined);
-    const signature = req.header('x-mailgun-signature') || (req.body?.signature as string | undefined);
-    const bodyEntries = Object.entries(req.body ?? {}).reduce<Record<string, string | string[]>>((acc, [key, value]) => {
-      if (Array.isArray(value)) {
-        acc[key] = value.map((item) => (typeof item === 'string' ? item : String(item)));
-      } else if (typeof value === 'string') {
-        acc[key] = value;
-      }
-      return acc;
-    }, {});
-    const attachments = (req.files as Express.Multer.File[]) ?? [];
-    const article = await blogService.createArticleFromMailgun({
-      timestamp,
-      token,
-      signature,
-      body: bodyEntries,
-      attachments
-    });
-    res.status(201).json(article);
-  } catch (error) {
-    next(error);
-  }
-});
-
 const staticPageSectionSchema = z.object({
   id: z.string().optional(),
   columns: z
@@ -478,7 +497,7 @@ router.get('/orphans', async (_req, res, next) => {
 router.get('/settings', async (_req, res, next) => {
   try {
     const settings = await metadataStore.readSettings();
-    res.json(settings);
+    res.json(sanitizeSettings(settings));
   } catch (error) {
     next(error);
   }
@@ -516,7 +535,14 @@ router.post('/thumbnails/rebuild', async (_req, res, next) => {
 
 router.put('/settings', async (req, res, next) => {
   try {
-    await metadataStore.updateSettings(req.body);
+    const current = await metadataStore.readSettings();
+    const payload = req.body ?? {};
+    const nextSettings: Settings = {
+      ...current,
+      ...payload,
+      security: current.security
+    };
+    await metadataStore.updateSettings(nextSettings);
     cacheService.clear();
     res.json({ success: true });
   } catch (error) {
@@ -535,16 +561,6 @@ router.post('/previews', async (req, res, next) => {
     const payload = previewSchema.parse(req.body);
     const token = await previewService.createToken(payload);
     res.json(token);
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.get('/sitemap', async (req, res, next) => {
-  try {
-    const baseUrl = (req.query.baseUrl as string) || 'https://example.com';
-    const xml = await mediaLibrary.sitemap(baseUrl);
-    res.type('application/xml').send(xml);
   } catch (error) {
     next(error);
   }

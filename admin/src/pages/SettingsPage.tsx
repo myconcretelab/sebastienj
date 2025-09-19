@@ -18,6 +18,7 @@ import {
 import PaletteIcon from '@mui/icons-material/PaletteRounded';
 import AddIcon from '@mui/icons-material/AddRounded';
 import DeleteIcon from '@mui/icons-material/DeleteRounded';
+import LockIcon from '@mui/icons-material/LockRounded';
 import { Settings } from '../api/types.js';
 import { api, useThumbnails } from '../api/client.js';
 import { ThumbnailSettingsPanel } from '../components/ThumbnailSettingsPanel.js';
@@ -32,6 +33,9 @@ export const SettingsPage: React.FC<Props> = ({ settings }) => {
   const [messageType, setMessageType] = useState<'success' | 'error'>('success');
   const [tab, setTab] = useState<'general' | 'thumbnails'>('general');
   const { data: thumbnailSummary, error: thumbnailError } = useThumbnails();
+  const [passwordDraft, setPasswordDraft] = useState({ current: '', next: '', confirm: '' });
+  const [passwordStatus, setPasswordStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [passwordLoading, setPasswordLoading] = useState(false);
 
   const updateAttribute = (index: number, key: keyof Settings['attributeTypes'][number], value: any) => {
     const next = { ...draft };
@@ -64,6 +68,36 @@ export const SettingsPage: React.FC<Props> = ({ settings }) => {
     } catch (error) {
       setMessage((error as Error).message);
       setMessageType('error');
+    }
+  };
+
+  const savePassword = async () => {
+    if (!passwordDraft.current || !passwordDraft.next || !passwordDraft.confirm) {
+      setPasswordStatus({ type: 'error', message: 'Veuillez renseigner tous les champs.' });
+      return;
+    }
+
+    if (passwordDraft.next !== passwordDraft.confirm) {
+      setPasswordStatus({ type: 'error', message: 'Les nouveaux mots de passe ne correspondent pas.' });
+      return;
+    }
+
+    if (passwordDraft.next.length < 6) {
+      setPasswordStatus({ type: 'error', message: 'Le nouveau mot de passe doit contenir au moins 6 caractères.' });
+      return;
+    }
+
+    setPasswordLoading(true);
+    setPasswordStatus(null);
+
+    try {
+      await api.updateAdminPassword(passwordDraft.current, passwordDraft.next);
+      setPasswordStatus({ type: 'success', message: 'Mot de passe mis à jour 🎉' });
+      setPasswordDraft({ current: '', next: '', confirm: '' });
+    } catch (error) {
+      setPasswordStatus({ type: 'error', message: (error as Error).message });
+    } finally {
+      setPasswordLoading(false);
     }
   };
 
@@ -334,6 +368,75 @@ export const SettingsPage: React.FC<Props> = ({ settings }) => {
                   </Stack>
                 ))}
               </Stack>
+            </CardContent>
+          </Card>
+
+          <Card variant="outlined">
+            <CardContent>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <LockIcon color="primary" />
+                <Typography variant="h6">Sécurité</Typography>
+              </Stack>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Mettez à jour le mot de passe nécessaire pour accéder à l'administration.
+              </Typography>
+              {passwordStatus && (
+                <Alert severity={passwordStatus.type} sx={{ mt: 2 }}>
+                  {passwordStatus.message}
+                </Alert>
+              )}
+              <Grid container spacing={2} sx={{ mt: 2 }}>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Mot de passe actuel"
+                    type="password"
+                    value={passwordDraft.current}
+                    onChange={(event) => {
+                      setPasswordStatus(null);
+                      setPasswordDraft((prev) => ({ ...prev, current: event.target.value }));
+                    }}
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Nouveau mot de passe"
+                    type="password"
+                    value={passwordDraft.next}
+                    onChange={(event) => {
+                      setPasswordStatus(null);
+                      setPasswordDraft((prev) => ({ ...prev, next: event.target.value }));
+                    }}
+                    fullWidth
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    label="Confirmer"
+                    type="password"
+                    value={passwordDraft.confirm}
+                    onChange={(event) => {
+                      setPasswordStatus(null);
+                      setPasswordDraft((prev) => ({ ...prev, confirm: event.target.value }));
+                    }}
+                    fullWidth
+                  />
+                </Grid>
+              </Grid>
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
+                <Button
+                  variant="contained"
+                  onClick={savePassword}
+                  disabled={
+                    passwordLoading ||
+                    !passwordDraft.current ||
+                    !passwordDraft.next ||
+                    !passwordDraft.confirm
+                  }
+                >
+                  {passwordLoading ? <CircularProgress size={20} color="inherit" /> : 'Mettre à jour le mot de passe'}
+                </Button>
+              </Box>
             </CardContent>
           </Card>
 

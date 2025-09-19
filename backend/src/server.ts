@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import type { Server } from 'http';
 import apiRouter from './routes/api.js';
 import mediaRouter from './routes/media.js';
+import authRouter from './routes/auth.js';
 import { metadataStore } from './services/MetadataStore.js';
 import { blogService } from './services/BlogService.js';
 import { staticPageStore } from './services/StaticPageStore.js';
@@ -32,6 +33,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(morgan('dev'));
 
 app.use('/api/media', mediaRouter);
+app.use('/api/auth', authRouter);
 app.use('/api', apiRouter);
 
 if (existsSync(ADMIN_DIST_DIR)) {
