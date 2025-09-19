@@ -13,6 +13,10 @@ import {
 const fetcher = async (url: string) => {
   const response = await fetch(url);
   if (!response.ok) {
+    if (response.status === 401) {
+      await mutate('/api/auth/session');
+      throw new Error('Authentification requise');
+    }
     throw new Error(`Erreur ${response.status}`);
   }
   return response.json();
@@ -25,6 +29,11 @@ export const useThumbnails = () => useSWR<ThumbnailSummary>('/api/thumbnails', f
 export const useStaticPages = () => useSWR<StaticPage[]>('/api/static-pages', fetcher);
 export const useBlogArticles = () => useSWR<BlogArticle[]>('/api/blog/articles', fetcher);
 export const useBlogSettings = () => useSWR<BlogSettings>('/api/blog/settings', fetcher);
+export const useAdminSession = () =>
+  useSWR<{ authenticated: boolean }>('/api/auth/session', fetcher, {
+    revalidateOnFocus: true,
+    shouldRetryOnError: false
+  });
 
 const postJson = async (url: string, body: unknown, method: string = 'POST') => {
   const response = await fetch(url, {
@@ -146,5 +155,17 @@ export const api = {
     const response = await postJson('/api/blog/settings', payload, 'PUT');
     await mutate('/api/blog/settings');
     return response as BlogSettings;
+  },
+  async login(password: string) {
+    await postJson('/api/auth/login', { password });
+    await mutate('/api/auth/session');
+  },
+  async logout() {
+    await postJson('/api/auth/logout', {}, 'POST');
+    await mutate('/api/auth/session');
+  },
+  async updateAdminPassword(currentPassword: string, newPassword: string) {
+    await postJson('/api/auth/password', { currentPassword, newPassword }, 'PUT');
+    await mutate('/api/auth/session');
   }
 };

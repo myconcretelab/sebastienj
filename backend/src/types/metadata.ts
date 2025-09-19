@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import { hashPassword } from '../utils/password.js';
+
+const DEFAULT_ADMIN_PASSWORD = 'tellthem';
+const { hash: DEFAULT_ADMIN_PASSWORD_HASH, salt: DEFAULT_ADMIN_PASSWORD_SALT } = hashPassword(DEFAULT_ADMIN_PASSWORD);
 
 export const attributeValueSchema = z.union([
   z.object({ type: z.literal('text'), value: z.string() }),
@@ -133,7 +137,17 @@ export const settingsSchema = z.object({
       enabled: z.boolean().default(true),
       tokenExpirationMinutes: z.number().default(30)
     })
-    .default({ enabled: true, tokenExpirationMinutes: 30 })
+    .default({ enabled: true, tokenExpirationMinutes: 30 }),
+  security: z
+    .object({
+      adminPasswordHash: z.string().nullable().default(DEFAULT_ADMIN_PASSWORD_HASH),
+      adminPasswordSalt: z.string().nullable().default(DEFAULT_ADMIN_PASSWORD_SALT),
+      passwordUpdatedAt: z.string().optional()
+    })
+    .default({
+      adminPasswordHash: DEFAULT_ADMIN_PASSWORD_HASH,
+      adminPasswordSalt: DEFAULT_ADMIN_PASSWORD_SALT
+    })
 });
 
 export type Settings = z.infer<typeof settingsSchema>;

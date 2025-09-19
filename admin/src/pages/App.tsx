@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo } from 'react';
-import { Box, CircularProgress, Divider, Stack, Typography } from '@mui/material';
+import { Alert, Box, CircularProgress, Divider, Stack, Typography } from '@mui/material';
 import { Routes, Route } from 'react-router-dom';
-import { useTree, useSettings, api } from '../api/client.js';
+import { useTree, useSettings, api, useAdminSession } from '../api/client.js';
 import { Toolbar } from '../components/Toolbar.js';
 import { ExplorerView } from '../components/ExplorerView.js';
 import { FolderEditor } from '../components/FolderEditor.js';
@@ -12,6 +12,7 @@ import { StaticPagesPage } from './StaticPagesPage.js';
 import { BlogPage } from './BlogPage.js';
 import { SelectionProvider, useSelection } from '../state/SelectionContext.js';
 import { FolderNode, MediaNode, Settings } from '../api/types.js';
+import { LoginPage } from './LoginPage.js';
 
 const findFolder = (root: FolderNode, path: string): FolderNode | undefined => {
   if (!path || root.path === path) return root;
@@ -135,10 +136,39 @@ const AppRoutes: React.FC = () => {
   );
 };
 
-const App: React.FC = () => (
-  <SelectionProvider>
-    <AppRoutes />
-  </SelectionProvider>
-);
+const App: React.FC = () => {
+  const {
+    data: session,
+    isLoading,
+    error: sessionError,
+    mutate: refreshSession
+  } = useAdminSession();
+
+  if (sessionError) {
+    return (
+      <Box sx={{ p: 6 }}>
+        <Alert severity="error">Impossible de vérifier la session administrateur.</Alert>
+      </Box>
+    );
+  }
+
+  if (isLoading || !session) {
+    return (
+      <Box sx={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (!session.authenticated) {
+    return <LoginPage onSuccess={() => refreshSession()} />;
+  }
+
+  return (
+    <SelectionProvider>
+      <AppRoutes />
+    </SelectionProvider>
+  );
+};
 
 export default App;
