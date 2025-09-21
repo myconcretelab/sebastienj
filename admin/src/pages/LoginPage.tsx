@@ -3,9 +3,11 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   Card,
   CardContent,
   CircularProgress,
+  FormControlLabel,
   Stack,
   TextField,
   Typography
@@ -19,6 +21,7 @@ interface Props {
 
 export const LoginPage: React.FC<Props> = ({ onSuccess }) => {
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -31,8 +34,9 @@ export const LoginPage: React.FC<Props> = ({ onSuccess }) => {
     setLoading(true);
     setError(null);
     try {
-      await api.login(password);
+      await api.login(password, rememberMe);
       setPassword('');
+      setRememberMe(false);
       onSuccess();
     } catch (err) {
       setError((err as Error).message || 'Authentification impossible');
@@ -73,6 +77,16 @@ export const LoginPage: React.FC<Props> = ({ onSuccess }) => {
                   onChange={(event) => setPassword(event.target.value)}
                   autoFocus
                   fullWidth
+                />
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={rememberMe}
+                      onChange={(event) => setRememberMe(event.target.checked)}
+                      color="primary"
+                    />
+                  }
+                  label="Rester connecté une semaine"
                 />
                 <Button
                   type="submit"
