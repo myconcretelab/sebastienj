@@ -1,3 +1,11 @@
+medias
+media/
+thumbnails/
+**/.media-meta.json
+**/.dossier-meta.json
+storage
+
+
 # Logs
 logs
 *.log

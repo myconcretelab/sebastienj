@@ -9,9 +9,10 @@ import { previewService } from '../services/PreviewService.js';
 import { staticPageStore } from '../services/StaticPageStore.js';
 import { thumbnailService } from '../services/ThumbnailService.js';
 import { requireAuth } from '../middleware/auth.js';
-import type { Settings } from '../types/metadata.js';
+import type { Settings, FolderMetadata } from '../types/metadata.js';
 import { thumbnailConfigSchema } from '../types/thumbnails.js';
 import { blogService } from '../services/BlogService.js';
+import { parentFolder, toPosix } from '../utils/pathUtils.js';
 
 const router = Router();
 const upload = multer({
@@ -262,10 +263,72 @@ const renameMediaSchema = z.object({
   name: z.string().min(1)
 });
 
+const uploadMediaSchema = z.object({
+  path: z.string().optional()
+});
+
+const reorderMediaSchema = z.object({
+  folder: z.string().optional(),
+  order: z.array(z.string())
+});
+
 router.post('/medias/rename', async (req, res, next) => {
   try {
     const { path, name } = renameMediaSchema.parse(req.body);
     await fileService.renameMedia(path, name);
+    cacheService.clear();
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/medias/upload', upload.array('files'), async (req, res, next) => {
+  try {
+    const { path } = uploadMediaSchema.parse(req.body ?? {});
+    const files = (req.files as Express.Multer.File[]) ?? [];
+    if (!files.length) {
+      res.status(400).json({ error: 'Aucun fichier fourni.' });
+      return;
+    }
+
+    const folderPath = path ?? '';
+    const saved = await Promise.all(files.map((file) => fileService.saveMedia(folderPath, file)));
+    cacheService.clear();
+    res.status(201).json({ success: true, medias: saved });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/medias/order', async (req, res, next) => {
+  try {
+    const { folder, order } = reorderMediaSchema.parse(req.body ?? {});
+    const folderPath = folder ?? '';
+    const sanitizedOrder = order
+      .map((item) => toPosix(item))
+      .filter((item) => parentFolder(item) === folderPath);
+
+    const uniqueOrder: string[] = [];
+    const seen = new Set<string>();
+    for (const item of sanitizedOrder) {
+      if (seen.has(item)) continue;
+      seen.add(item);
+      uniqueOrder.push(item);
+    }
+
+    const existingMeta = (await metadataStore.getFolderMeta(folderPath)) ?? undefined;
+    const nextMeta = { ...(existingMeta ?? {}) } as FolderMetadata;
+    if (uniqueOrder.length === 0) {
+      if (nextMeta.mediaOrder) {
+        delete nextMeta.mediaOrder;
+        await metadataStore.upsertFolderMeta(folderPath, nextMeta);
+      }
+    } else {
+      nextMeta.mediaOrder = uniqueOrder;
+      await metadataStore.upsertFolderMeta(folderPath, nextMeta);
+    }
+
     cacheService.clear();
     res.json({ success: true });
   } catch (error) {

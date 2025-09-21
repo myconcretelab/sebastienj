@@ -88,6 +88,26 @@ export const api = {
     await postJson('/api/medias', { path }, 'DELETE');
     await mutate('/api/tree');
   },
+  async uploadMedias(path: string, files: File[]) {
+    if (!files.length) return { success: true };
+    const formData = new FormData();
+    formData.append('path', path);
+    files.forEach((file) => formData.append('files', file));
+    const response = await fetch('/api/medias/upload', {
+      method: 'POST',
+      body: formData
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || 'Erreur lors du téléversement');
+    }
+    await mutate('/api/tree');
+    return response.json();
+  },
+  async orderMedias(folder: string, order: string[]) {
+    await postJson('/api/medias/order', { folder, order });
+    await mutate('/api/tree');
+  },
   async updateSettings(settings: Settings) {
     await postJson('/api/settings', settings, 'PUT');
     await mutate('/api/settings');

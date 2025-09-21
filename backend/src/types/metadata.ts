@@ -24,6 +24,7 @@ export const folderMetadataSchema = z.object({
   visibility: z.enum(['public', 'private']).default('public'),
   coverMedia: z.string().optional(),
   attributes: z.record(attributeValueSchema).optional(),
+  mediaOrder: z.array(z.string()).optional(),
   updatedAt: z.string().optional(),
   createdAt: z.string().optional()
 });

@@ -22,6 +22,7 @@ export type FolderNode = {
   updatedAt?: string;
   icon?: string;
   coverMedia?: string;
+  mediaOrder?: string[];
   children: Array<FolderNode | MediaNode>;
 };
 

@@ -1,1 +1,36 @@
-{}
+{
+  "peintures": {
+    "visibility": "public",
+    "mediaOrder": [
+      "peintures/Campeneac-04.jpg"
+    ],
+    "updatedAt": "2025-09-21T08:22:14.303Z",
+    "createdAt": "2025-09-21T08:22:14.303Z"
+  },
+  "dessins/croquis": {
+    "visibility": "public",
+    "mediaOrder": [
+      "dessins/croquis/Campeneac-05.jpg",
+      "dessins/croquis/Campeneac-10.jpg"
+    ],
+    "updatedAt": "2025-09-21T08:22:33.890Z",
+    "createdAt": "2025-09-21T08:22:29.808Z"
+  },
+  "dessins": {
+    "visibility": "public",
+    "updatedAt": "2025-09-21T08:30:36.169Z",
+    "createdAt": "2025-09-21T08:30:36.169Z"
+  },
+  "dessins/paysages": {
+    "visibility": "public",
+    "mediaOrder": [
+      "dessins/paysages/08-11-23-Sous-bois.jpg",
+      "dessins/paysages/21-11-23-Guilliers.jpg",
+      "dessins/paysages/27-11-23-Threorenteuc.jpg",
+      "dessins/paysages/04-11-23-Tlohan.jpg",
+      "dessins/paysages/22-11-23-Copie.jpg"
+    ],
+    "updatedAt": "2025-09-21T08:31:11.355Z",
+    "createdAt": "2025-09-21T08:30:53.127Z"
+  }
+}

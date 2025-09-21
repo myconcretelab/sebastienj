@@ -25,6 +25,7 @@ export interface FolderNode extends MediaNodeBase {
   children: Array<FolderNode | MediaLeaf>;
   icon?: string;
   coverMedia?: string;
+  mediaOrder?: string[];
 }
 
 export interface MediaLeaf extends MediaNodeBase {
@@ -66,6 +67,20 @@ const isHiddenFile = (name: string) => name.startsWith('.');
 const sortNodes = <T extends MediaNodeBase>(nodes: T[]) =>
   nodes.sort((a, b) => (a.title || a.name).localeCompare(b.title || b.name, 'fr'));
 
+const sortMediasWithOrder = <T extends MediaNodeBase & { path: string }>(medias: T[], order?: string[]) => {
+  if (!order || order.length === 0) {
+    return sortNodes([...medias]);
+  }
+
+  const orderMap = new Map(order.map((path, index) => [path, index]));
+  return [...medias].sort((a, b) => {
+    const aIndex = orderMap.has(a.path) ? orderMap.get(a.path)! : Number.MAX_SAFE_INTEGER;
+    const bIndex = orderMap.has(b.path) ? orderMap.get(b.path)! : Number.MAX_SAFE_INTEGER;
+    if (aIndex !== bIndex) return aIndex - bIndex;
+    return (a.title || a.name).localeCompare(b.title || b.name, 'fr');
+  });
+};
+
 export class MediaLibrary {
   async tree(): Promise<LibraryTree> {
     const cached = cacheService.get<LibraryTree>('tree');
@@ -82,7 +97,8 @@ export class MediaLibrary {
 
     const { folders, medias } = await metadataStore.readAll();
 
-    const children: Array<FolderNode | MediaLeaf> = [];
+    const folderChildren: FolderNode[] = [];
+    const mediaChildren: MediaLeaf[] = [];
 
     for (const entry of entries) {
       if (isHiddenFile(entry.name)) continue;
@@ -102,7 +118,7 @@ export class MediaLibrary {
         folderNode.updatedAt = folderMeta?.updatedAt;
         folderNode.createdAt = folderMeta?.createdAt;
 
-        children.push(folderNode);
+        folderChildren.push(folderNode);
       } else {
         const meta = medias[normalized];
         const absoluteMediaPath = path.join(MEDIA_ROOT, normalized);
@@ -127,21 +143,24 @@ export class MediaLibrary {
           orientation: meta?.orientation,
           thumbnails: meta?.thumbnails
         };
-        children.push(leaf);
+        mediaChildren.push(leaf);
       }
     }
 
     const folderAbsolute = relative ? path.join(MEDIA_ROOT, relative) : MEDIA_ROOT;
     const description = await readDescription(folderAbsolute);
+    const folderMeta = folders[toPosix(relative)] || undefined;
 
-    const folderMeta = (await metadataStore.getFolderMeta(relative)) || undefined;
+    const orderedFolders = sortNodes(folderChildren);
+    const orderedMedias = sortMediasWithOrder(mediaChildren, folderMeta?.mediaOrder);
+    const children: Array<FolderNode | MediaLeaf> = [...orderedFolders, ...orderedMedias];
 
     const node: FolderNode = {
       type: 'folder',
       name: relative ? path.basename(relative) : path.basename(MEDIA_ROOT),
       path: toPosix(relative),
       title: folderMeta?.title || (relative ? path.basename(relative) : path.basename(MEDIA_ROOT)),
-      children: sortNodes(children),
+      children,
       tags: folderMeta?.tags,
       visibility: folderMeta?.visibility,
       attributes: folderMeta?.attributes,
@@ -149,7 +168,8 @@ export class MediaLibrary {
       updatedAt: folderMeta?.updatedAt,
       createdAt: folderMeta?.createdAt,
       icon: folderMeta?.icon,
-      coverMedia: folderMeta?.coverMedia
+      coverMedia: folderMeta?.coverMedia,
+      mediaOrder: folderMeta?.mediaOrder
     };
 
     return node;
