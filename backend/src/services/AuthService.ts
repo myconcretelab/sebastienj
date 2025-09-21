@@ -6,6 +6,7 @@ import type { Settings } from '../types/metadata.js';
 
 export const SESSION_COOKIE_NAME = 'atelier_admin_session';
 const SESSION_DURATION_MS = 1000 * 60 * 60 * 12; // 12 hours
+const EXTENDED_SESSION_DURATION_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
 
 export class InvalidCredentialsError extends Error {
   constructor(message: string = 'Identifiants invalides') {
@@ -23,6 +24,10 @@ class AuthService {
 
   get sessionDurationMs(): number {
     return SESSION_DURATION_MS;
+  }
+
+  get extendedSessionDurationMs(): number {
+    return EXTENDED_SESSION_DURATION_MS;
   }
 
   private pruneExpiredSessions() {
@@ -51,15 +56,15 @@ class AuthService {
     return true;
   }
 
-  createSession(): string {
+  createSession(durationMs: number = SESSION_DURATION_MS): string {
     const token = this.nextSessionToken();
-    this.sessions.set(token, { expiresAt: Date.now() + SESSION_DURATION_MS });
+    this.sessions.set(token, { expiresAt: Date.now() + durationMs });
     return token;
   }
 
-  issueSession(res: Response): string {
-    const token = this.createSession();
-    this.setSessionCookie(res, token);
+  issueSession(res: Response, durationMs: number = SESSION_DURATION_MS): string {
+    const token = this.createSession(durationMs);
+    this.setSessionCookie(res, token, durationMs);
     return token;
   }
 
@@ -71,12 +76,12 @@ class AuthService {
     this.sessions.clear();
   }
 
-  setSessionCookie(res: Response, token: string) {
+  setSessionCookie(res: Response, token: string, durationMs: number = SESSION_DURATION_MS) {
     res.cookie(SESSION_COOKIE_NAME, token, {
       httpOnly: true,
       sameSite: 'strict',
       secure: process.env.NODE_ENV === 'production',
-      maxAge: SESSION_DURATION_MS,
+      maxAge: durationMs,
       path: '/' // ensure cookie available to all routes
     });
   }

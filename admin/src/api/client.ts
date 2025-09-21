@@ -176,8 +176,8 @@ export const api = {
     await mutate('/api/blog/settings');
     return response as BlogSettings;
   },
-  async login(password: string) {
-    await postJson('/api/auth/login', { password });
+  async login(password: string, remember: boolean = false) {
+    await postJson('/api/auth/login', { password, remember });
     await mutate('/api/auth/session');
   },
   async logout() {

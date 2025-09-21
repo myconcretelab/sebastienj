@@ -6,18 +6,20 @@ import { getSessionTokenFromRequest, requireAuth } from '../middleware/auth.js';
 const router = Router();
 
 const loginSchema = z.object({
-  password: z.string().min(1)
+  password: z.string().min(1),
+  remember: z.boolean().optional()
 });
 
 router.post('/login', async (req, res, next) => {
   try {
-    const { password } = loginSchema.parse(req.body ?? {});
+    const { password, remember } = loginSchema.parse(req.body ?? {});
     const valid = await authService.verifyPassword(password);
     if (!valid) {
       res.status(401).send('Mot de passe invalide');
       return;
     }
-    authService.issueSession(res);
+    const duration = remember ? authService.extendedSessionDurationMs : undefined;
+    authService.issueSession(res, duration);
     res.json({ success: true });
   } catch (error) {
     next(error);
