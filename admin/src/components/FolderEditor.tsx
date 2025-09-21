@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
   Button,
   Divider,
   FormControlLabel,
+  MenuItem,
   Stack,
   Switch,
   TextField,
@@ -12,6 +13,10 @@ import {
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/EditRounded';
 import SaveIcon from '@mui/icons-material/SaveRounded';
+import FolderIcon from '@mui/icons-material/FolderRounded';
+import BrushIcon from '@mui/icons-material/BrushRounded';
+import PhotoIcon from '@mui/icons-material/PhotoCameraRounded';
+import CollectionsIcon from '@mui/icons-material/CollectionsRounded';
 import { FolderNode, Settings } from '../api/types.js';
 import { AttributeEditor } from './AttributeEditor.js';
 
@@ -28,6 +33,7 @@ export const FolderEditor: React.FC<Props> = ({ folder, settings, onSaveMetadata
   const [tags, setTags] = useState(folder.tags?.join(', ') || '');
   const [visibility, setVisibility] = useState(folder.visibility !== 'private');
   const [cover, setCover] = useState(folder.coverMedia || '');
+  const [icon, setIcon] = useState(folder.icon || '');
   const [attributes, setAttributes] = useState(folder.attributes || {});
   const [description, setDescription] = useState(folder.description || '');
   const [message, setMessage] = useState<string | undefined>();
@@ -38,6 +44,7 @@ export const FolderEditor: React.FC<Props> = ({ folder, settings, onSaveMetadata
     setTags(folder.tags?.join(', ') || '');
     setVisibility(folder.visibility !== 'private');
     setCover(folder.coverMedia || '');
+    setIcon(folder.icon || '');
     setAttributes(folder.attributes || {});
     setDescription(folder.description || '');
     setRenameValue(folder.name);
@@ -52,6 +59,7 @@ export const FolderEditor: React.FC<Props> = ({ folder, settings, onSaveMetadata
         .filter(Boolean),
       visibility: visibility ? 'public' : 'private',
       coverMedia: cover,
+      icon: icon || undefined,
       attributes
     } as any);
     setMessage('Métadonnées enregistrées ✨');
@@ -67,6 +75,16 @@ export const FolderEditor: React.FC<Props> = ({ folder, settings, onSaveMetadata
     await onRename(renameValue);
     setMessage(`Dossier renommé en ${renameValue}`);
   };
+
+  const iconOptions = useMemo(
+    () => [
+      { value: '', label: 'Automatique', icon: <FolderIcon fontSize="small" /> },
+      { value: 'brush', label: 'Atelier / pinceaux', icon: <BrushIcon fontSize="small" /> },
+      { value: 'photo', label: 'Photographies', icon: <PhotoIcon fontSize="small" /> },
+      { value: 'croquis', label: 'Croquis', icon: <CollectionsIcon fontSize="small" /> }
+    ],
+    []
+  );
 
   return (
     <Stack spacing={3}>
@@ -111,6 +129,23 @@ export const FolderEditor: React.FC<Props> = ({ folder, settings, onSaveMetadata
           onChange={(event) => setCover(event.target.value)}
           sx={{ flex: 1 }}
         />
+        <TextField
+          label="Icône"
+          value={icon}
+          onChange={(event) => setIcon(event.target.value)}
+          select
+          sx={{ flex: 1 }}
+          helperText="Icône affichée dans l'arborescence"
+        >
+          {iconOptions.map((option) => (
+            <MenuItem key={option.value || 'default'} value={option.value}>
+              <Stack direction="row" spacing={1} alignItems="center">
+                {option.icon}
+                <span>{option.label}</span>
+              </Stack>
+            </MenuItem>
+          ))}
+        </TextField>
         <FormControlLabel
           control={<Switch checked={visibility} onChange={(event) => setVisibility(event.target.checked)} />}
           label={visibility ? 'Visible' : 'Masqué'}
