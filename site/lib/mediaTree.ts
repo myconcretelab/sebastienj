@@ -2,6 +2,8 @@ import { cache } from "react";
 import fs from "fs/promises";
 import path from "path";
 
+import { getFolderMetadata, type FolderMetadataRecord } from "./folderMetadata";
+
 export type MediaNode = {
   name: string;
   displayName: string;
@@ -39,12 +41,22 @@ function joinSegments(segments: string[]) {
   return segments.map((segment) => encodeURIComponent(segment)).join("/");
 }
 
-async function buildTree(currentPath: string, segments: string[]): Promise<MediaNode> {
+async function buildTree(
+  currentPath: string,
+  segments: string[],
+  folderMetadata: FolderMetadataRecord
+): Promise<MediaNode> {
   const entries = await fs.readdir(currentPath, { withFileTypes: true });
 
   const directories = entries
     .filter((entry) => entry.isDirectory() && !entry.name.startsWith("."))
     .sort((a, b) => a.name.localeCompare(b.name, "fr"));
+
+  const folderKey = segments.join("/");
+  const order = folderMetadata[folderKey]?.mediaOrder ?? [];
+  const orderMap = new Map(order.map((item, index) => [item, index]));
+
+  const toRelativePath = (name: string) => (folderKey ? `${folderKey}/${name}` : name);
 
   const files = entries
     .filter(
@@ -53,13 +65,22 @@ async function buildTree(currentPath: string, segments: string[]): Promise<Media
         !entry.name.startsWith(".") &&
         !IGNORED_FILES.has(entry.name)
     )
-    .sort((a, b) => a.name.localeCompare(b.name, "fr"));
+    .sort((a, b) => {
+      const aPath = toRelativePath(a.name);
+      const bPath = toRelativePath(b.name);
+      const aIndex = orderMap.has(aPath) ? orderMap.get(aPath)! : Number.MAX_SAFE_INTEGER;
+      const bIndex = orderMap.has(bPath) ? orderMap.get(bPath)! : Number.MAX_SAFE_INTEGER;
+      if (aIndex !== bIndex) {
+        return aIndex - bIndex;
+      }
+      return a.name.localeCompare(b.name, "fr");
+    });
 
   const children: MediaNode[] = [];
 
   for (const dir of directories) {
     const nextSegments = [...segments, dir.name];
-    children.push(await buildTree(path.join(currentPath, dir.name), nextSegments));
+    children.push(await buildTree(path.join(currentPath, dir.name), nextSegments, folderMetadata));
   }
 
   for (const file of files) {
@@ -87,7 +108,8 @@ async function buildTree(currentPath: string, segments: string[]): Promise<Media
 }
 
 export const getMediaTree = cache(async () => {
-  return buildTree(MEDIA_ROOT, []);
+  const folderMetadata = await getFolderMetadata();
+  return buildTree(MEDIA_ROOT, [], folderMetadata);
 });
 
 export function findNodeByPath(root: MediaNode, segments: string[]) {
