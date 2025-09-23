@@ -8,6 +8,7 @@ import { cacheService } from '../services/CacheService.js';
 import { previewService } from '../services/PreviewService.js';
 import { staticPageStore } from '../services/StaticPageStore.js';
 import { thumbnailService } from '../services/ThumbnailService.js';
+import { mediaMetadataSyncService } from '../services/MediaMetadataSyncService.js';
 import { requireAuth } from '../middleware/auth.js';
 import type { Settings, FolderMetadata } from '../types/metadata.js';
 import { thumbnailConfigSchema } from '../types/thumbnails.js';
@@ -552,6 +553,15 @@ router.get('/orphans', async (_req, res, next) => {
   try {
     const orphans = await mediaLibrary.findOrphans();
     res.json(orphans);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/orphans/reconcile', async (_req, res, next) => {
+  try {
+    const summary = await mediaMetadataSyncService.reconcile();
+    res.json({ success: true, summary });
   } catch (error) {
     next(error);
   }

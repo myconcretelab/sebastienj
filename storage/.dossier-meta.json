@@ -37,5 +37,15 @@
     "visibility": "public",
     "updatedAt": "2025-09-23T06:41:59.566Z",
     "createdAt": "2025-09-23T06:41:59.566Z"
+  },
+  "photographies": {
+    "visibility": "public",
+    "updatedAt": "2025-09-23T08:37:01.586Z",
+    "createdAt": "2025-09-23T08:37:01.586Z"
+  },
+  "test": {
+    "visibility": "public",
+    "updatedAt": "2025-09-23T08:37:01.588Z",
+    "createdAt": "2025-09-23T08:37:01.588Z"
   }
 }

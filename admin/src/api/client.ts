@@ -50,7 +50,11 @@ const postJson = async (url: string, body: unknown, method: string = 'POST') => 
 
 export const api = {
   async refreshTree() {
-    await mutate('/api/tree');
+    await postJson('/api/orphans/reconcile', {});
+    await Promise.all([
+      mutate('/api/tree'),
+      mutate('/api/orphans')
+    ]);
   },
   async saveFolderMeta(path: string, metadata: unknown) {
     await postJson('/api/folders/meta', { path, metadata }, 'PUT');

@@ -32,6 +32,36 @@ const readJsonFile = async <T>(file: string, fallback: T): Promise<T> => {
   }
 };
 
+const writeJsonAtomic = async (file: string, data: unknown) => {
+  const directory = path.dirname(file);
+  await fs.mkdir(directory, { recursive: true });
+
+  const tempFile = path.join(
+    directory,
+    `${path.basename(file)}.${process.pid}.${Date.now()}.tmp`
+  );
+
+  const serialized = JSON.stringify(data, null, 2);
+
+  try {
+    await fs.writeFile(tempFile, serialized, 'utf-8');
+    try {
+      await fs.rename(tempFile, file);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === 'EEXIST' || code === 'EPERM') {
+        await fs.rm(file, { force: true });
+        await fs.rename(tempFile, file);
+      } else {
+        throw error;
+      }
+    }
+  } catch (error) {
+    await fs.rm(tempFile, { force: true }).catch(() => {});
+    throw error;
+  }
+};
+
 export class MetadataStore {
   private folderCache?: FolderMetadataRecord;
   private mediaCache?: MediaMetadataRecord;
@@ -150,14 +180,14 @@ export class MetadataStore {
 
   async updateSettings(next: Settings) {
     const parsed = settingsSchema.parse(next);
-    await fs.writeFile(SETTINGS_FILE, JSON.stringify(parsed, null, 2), 'utf-8');
+    await writeJsonAtomic(SETTINGS_FILE, parsed);
     this.settingsCache = parsed;
   }
 
   async writeBundle(bundle: MetadataBundle) {
     await Promise.all([
-      fs.writeFile(FOLDER_META_FILE, JSON.stringify(bundle.folders, null, 2), 'utf-8'),
-      fs.writeFile(MEDIA_META_FILE, JSON.stringify(bundle.medias, null, 2), 'utf-8')
+      writeJsonAtomic(FOLDER_META_FILE, bundle.folders),
+      writeJsonAtomic(MEDIA_META_FILE, bundle.medias)
     ]);
     this.folderCache = bundle.folders;
     this.mediaCache = bundle.medias;

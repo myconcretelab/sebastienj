@@ -13,6 +13,7 @@ import { metadataStore } from './services/MetadataStore.js';
 import { blogService } from './services/BlogService.js';
 import { staticPageStore } from './services/StaticPageStore.js';
 import { thumbnailService } from './services/ThumbnailService.js';
+import { mediaMetadataSyncService } from './services/MediaMetadataSyncService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -69,6 +70,7 @@ export const startServer = async (): Promise<Server> => {
   await metadataStore.ensureReady();
   await blogService.ensureReady();
   await staticPageStore.ensureReady();
+  await mediaMetadataSyncService.ensureReady();
   await thumbnailService.ensureReady();
   await nextApp.prepare();
 
