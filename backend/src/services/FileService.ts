@@ -2,11 +2,173 @@ import { promises as fs } from 'fs';
 import path from 'path';
 import { buildAbsoluteMediaPath, parentFolder, toPosix } from '../utils/pathUtils.js';
 import { metadataStore } from './MetadataStore.js';
-import type { FolderMetadata } from '../types/metadata.js';
+import type { AttributeValue, FolderMetadata, MediaMetadata } from '../types/metadata.js';
 
 const DESCRIPTION_FILE = 'description.md';
 
 export class FileService {
+  private normalizeComparablePath(value?: string) {
+    if (!value) return undefined;
+    return toPosix(value).replace(/^\/+/, '');
+  }
+
+  private formatReplacementValue(previous: string, nextRelative: string) {
+    if (previous.startsWith('/')) {
+      return `/${nextRelative}`;
+    }
+    return nextRelative;
+  }
+
+  private replaceAttributeImageValues(
+    attributes: Record<string, AttributeValue> | undefined,
+    current: string,
+    next: string
+  ) {
+    if (!attributes) return { changed: false, attributes } as const;
+    let changed = false;
+    const nextAttributes: Record<string, AttributeValue> = {};
+
+    for (const [key, attribute] of Object.entries(attributes)) {
+      if (attribute.type === 'image') {
+        const normalized = this.normalizeComparablePath(attribute.value);
+        if (normalized === current) {
+          nextAttributes[key] = { ...attribute, value: this.formatReplacementValue(attribute.value, next) };
+          changed = true;
+          continue;
+        }
+      }
+      nextAttributes[key] = attribute;
+    }
+
+    if (!changed) {
+      return { changed: false, attributes } as const;
+    }
+
+    return { changed: true, attributes: nextAttributes } as const;
+  }
+
+  private updateThumbnailsForRename(
+    thumbnails: MediaMetadata['thumbnails'],
+    current: string,
+    next: string
+  ) {
+    if (!thumbnails) return { changed: false, thumbnails } as const;
+
+    const currentInfo = path.posix.parse(current);
+    const nextInfo = path.posix.parse(next);
+    const folder = currentInfo.dir ? `${currentInfo.dir}/` : '';
+    const nextFolder = nextInfo.dir ? `${nextInfo.dir}/` : folder;
+    const currentPrefix = `/thumbnails/${folder}${currentInfo.name}_`;
+    const nextPrefix = `/thumbnails/${nextFolder}${nextInfo.name}_`;
+
+    let changed = false;
+    const nextThumbnails: NonNullable<MediaMetadata['thumbnails']> = {};
+
+    for (const [key, entry] of Object.entries(thumbnails)) {
+      let entryChanged = false;
+      let defaultPath = entry.defaultPath;
+      if (typeof defaultPath === 'string') {
+        const normalized = toPosix(defaultPath);
+        if (normalized.startsWith(currentPrefix)) {
+          defaultPath = `${nextPrefix}${normalized.slice(currentPrefix.length)}`;
+          entryChanged = true;
+        }
+      }
+
+      const sources = entry.sources.map((source) => {
+        const normalized = toPosix(source.path);
+        if (normalized.startsWith(currentPrefix)) {
+          entryChanged = true;
+          return {
+            ...source,
+            path: `${nextPrefix}${normalized.slice(currentPrefix.length)}`
+          };
+        }
+        return source;
+      });
+
+      nextThumbnails[key] = entryChanged
+        ? { ...entry, defaultPath, sources }
+        : entry;
+      if (entryChanged) changed = true;
+    }
+
+    if (!changed) {
+      return { changed: false, thumbnails } as const;
+    }
+
+    return { changed: true, thumbnails: nextThumbnails } as const;
+  }
+
+  private updateMediaSelfMetadata(meta: MediaMetadata, current: string, next: string): MediaMetadata {
+    let updated = meta;
+    const { changed: attrChanged, attributes } = this.replaceAttributeImageValues(meta.attributes, current, next);
+    if (attrChanged) {
+      updated = { ...updated, attributes };
+    }
+
+    const { changed: thumbnailsChanged, thumbnails } = this.updateThumbnailsForRename(meta.thumbnails, current, next);
+    if (thumbnailsChanged) {
+      updated = { ...updated, thumbnails };
+    }
+
+    if (updated === meta) {
+      return meta;
+    }
+
+    return updated;
+  }
+
+  private async updateCrossReferences(current: string, next: string) {
+    const bundle = await metadataStore.readAll();
+
+    let foldersChanged = false;
+    const nextFolders: typeof bundle.folders = { ...bundle.folders };
+    for (const [key, folder] of Object.entries(bundle.folders)) {
+      let candidate = folder;
+      let changed = false;
+
+      if (folder.coverMedia && this.normalizeComparablePath(folder.coverMedia) === current) {
+        candidate = { ...candidate, coverMedia: this.formatReplacementValue(folder.coverMedia, next) };
+        changed = true;
+      }
+
+      const { changed: attrChanged, attributes } = this.replaceAttributeImageValues(folder.attributes, current, next);
+      if (attrChanged) {
+        candidate = { ...candidate, attributes };
+        changed = true;
+      }
+
+      if (changed) {
+        foldersChanged = true;
+        nextFolders[key] = candidate;
+      }
+    }
+
+    let mediasChanged = false;
+    const nextMedias: typeof bundle.medias = { ...bundle.medias };
+    if (nextMedias[current]) {
+      mediasChanged = true;
+      delete nextMedias[current];
+    }
+
+    for (const [key, media] of Object.entries(bundle.medias)) {
+      if (key === current) continue;
+      const { changed: attrChanged, attributes } = this.replaceAttributeImageValues(media.attributes, current, next);
+      if (attrChanged) {
+        mediasChanged = true;
+        nextMedias[key] = { ...media, attributes };
+      }
+    }
+
+    if (foldersChanged || mediasChanged) {
+      await metadataStore.writeBundle({
+        folders: foldersChanged ? nextFolders : bundle.folders,
+        medias: mediasChanged ? nextMedias : bundle.medias
+      });
+    }
+  }
+
   private async updateFolderMediaOrder(
     folderPath: string,
     mutate: (order: string[]) => string[] | null | undefined
@@ -127,17 +289,20 @@ export class FileService {
     const target = path.join(path.dirname(absolute), nextName);
     await fs.rename(absolute, target);
 
+    const normalizedCurrent = toPosix(relativePath);
     const newRelative = toPosix(path.posix.join(parentFolder(relativePath), nextName));
 
     const meta = await metadataStore.getMediaMeta(relativePath);
     if (meta) {
+      const updatedMeta = this.updateMediaSelfMetadata(meta, normalizedCurrent, newRelative);
       await metadataStore.deleteMediaMeta(relativePath);
-      await metadataStore.upsertMediaMeta(newRelative, meta);
+      await metadataStore.upsertMediaMeta(newRelative, updatedMeta);
+    } else {
+      await metadataStore.deleteMediaMeta(relativePath);
     }
 
     const folder = parentFolder(relativePath);
     await this.updateFolderMediaOrder(folder, (order) => {
-      const normalizedCurrent = toPosix(relativePath);
       let replaced = false;
       const mapped = order.map((item) => {
         if (item === normalizedCurrent) {
@@ -151,6 +316,8 @@ export class FileService {
       }
       return mapped;
     });
+
+    await this.updateCrossReferences(normalizedCurrent, newRelative);
   }
 
   async writeFolderDescription(relativePath: string, markdown: string) {
