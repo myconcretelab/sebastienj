@@ -39,7 +39,15 @@ const findFolder = (root: FolderNode, path: string): FolderNode | undefined => {
 };
 
 const AdminView: React.FC<{ tree: FolderNode; settings: Settings }> = ({ tree, settings }) => {
-  const { folderPath, mediaPath, mediaPaths, setFolderPath, setMediaPath, setMediaSelection } = useSelection();
+  const {
+    folderPath,
+    mediaPath,
+    mediaPaths,
+    setFolderPath,
+    setMediaPath,
+    setMediaSelection,
+    updateMediaPositions
+  } = useSelection();
   const [isFolderEditorOpen, setFolderEditorOpen] = useState(false);
   const [isUploading, setUploading] = useState(false);
   const [dropActive, setDropActive] = useState(false);
@@ -188,11 +196,11 @@ const AdminView: React.FC<{ tree: FolderNode; settings: Settings }> = ({ tree, s
                 : `${movedPaths.length} images déplacées vers ${destinationLabel}.`
           });
         }
-        setFolderPath(normalizedDestination);
-        setMediaSelection(movedPaths, movedPaths[movedPaths.length - 1]);
+        await api.refreshTree();
+        updateMediaPositions(folderPath, mediaList, movedPaths);
       }
     },
-    [setFolderPath, setMediaSelection]
+    [folderPath, setUploadFeedback, updateMediaPositions]
   );
 
   const handleReorderMedias = useCallback(
@@ -263,7 +271,7 @@ const AdminView: React.FC<{ tree: FolderNode; settings: Settings }> = ({ tree, s
               />
             </Box>
 
-            {selectedMedia && (
+            {mediaPaths.length === 1 && selectedMedia && (
               <MediaEditor
                 media={selectedMedia}
                 settings={settings}

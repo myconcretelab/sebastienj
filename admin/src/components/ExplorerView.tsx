@@ -12,26 +12,26 @@ import {
 } from '@mui/material';
 import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
 import { TreeItem } from '@mui/x-tree-view/TreeItem';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import BrushIcon from '@mui/icons-material/BrushRounded';
 import PhotoIcon from '@mui/icons-material/PhotoCameraRounded';
 import CollectionsIcon from '@mui/icons-material/CollectionsRounded';
 import FolderIcon from '@mui/icons-material/FolderRounded';
 import AutoAwesomeMotionIcon from '@mui/icons-material/AutoAwesomeMotion';
+import Avatar from '@mui/material/Avatar';
+import { useTheme } from '@mui/material/styles';
 import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolderRounded';
 import EditIcon from '@mui/icons-material/EditRounded';
 import { FolderNode } from '../api/types.js';
 import { motion } from 'framer-motion';
 
 const MEDIA_DRAG_TYPE = 'application/x-media-path';
+const LABEL_PADDING_LEFT = 4; // base left padding for folder label rows
+const LEVEL_INDENT_WIDTH = 15; // additional padding applied per depth level
+const TOGGLE_ICON_GAP = 0; // horizontal gap between the +/- toggle and folder labels (theme spacing units)
+const ROW_VERTICAL_PADDING = 0.2; // vertical padding applied to each explorer row (theme spacing units)
+const ROW_CONTENT_VERTICAL_PADDING = ROW_VERTICAL_PADDING * 0.5;
 
-const iconForFolder = (node: FolderNode) => {
-  if (node.icon === 'brush' || node.name.toLowerCase().includes('peint')) return <BrushIcon fontSize="small" />;
-  if (node.icon === 'photo' || node.name.toLowerCase().includes('photo')) return <PhotoIcon fontSize="small" />;
-  if (node.icon === 'croquis' || node.name.toLowerCase().includes('croquis')) return <CollectionsIcon fontSize="small" />;
-  return <FolderIcon fontSize="small" />;
-};
+const LeafPlaceholder = () => <Box component="span" sx={{ width: 16, height: 16 }} />;
 
 interface Props {
   tree: FolderNode;
@@ -50,9 +50,66 @@ export const ExplorerView: React.FC<Props> = ({
   onEditFolder,
   onMoveMedias
 }) => {
+  const theme = useTheme();
+  const accentColor = theme.palette.primary?.light || '#6f89a6';
+
+  const iconForFolder = (node: FolderNode) => {
+    const iconProps = { sx: { fontSize: 18, color: accentColor } };
+    if (node.icon === 'brush' || node.name.toLowerCase().includes('peint')) return <BrushIcon {...iconProps} />;
+    if (node.icon === 'photo' || node.name.toLowerCase().includes('photo')) return <PhotoIcon {...iconProps} />;
+    if (node.icon === 'croquis' || node.name.toLowerCase().includes('croquis')) return <CollectionsIcon {...iconProps} />;
+    return <FolderIcon {...iconProps} />;
+  };
+
+  const ExpandIcon = () => (
+    <Box
+      component="span"
+      sx={{
+        width: 16,
+        textAlign: 'center',
+        color: accentColor,
+        fontSize: 16,
+        fontWeight: 700,
+        lineHeight: '16px'
+      }}
+    >
+      +
+    </Box>
+  );
+
+  const CollapseIcon = () => (
+    <Box
+      component="span"
+      sx={{
+        width: 16,
+        textAlign: 'center',
+        color: accentColor,
+        fontSize: 16,
+        fontWeight: 700,
+        lineHeight: '16px'
+      }}
+    >
+      −
+    </Box>
+  );
   const [newFolderName, setNewFolderName] = useState('');
   const rootId = tree.path || 'root';
-  const [expanded, setExpanded] = useState<string[]>(() => [rootId]);
+  const [expanded, setExpanded] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [rootId];
+    try {
+      const raw = window.localStorage.getItem('explorer-expanded');
+      if (!raw) return [rootId];
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        const normalized = parsed.filter((value): value is string => typeof value === 'string');
+        return normalized.length > 0 ? Array.from(new Set([rootId, ...normalized])) : [rootId];
+      }
+      return [rootId];
+    } catch (error) {
+      console.warn('Failed to restore explorer state', error);
+      return [rootId];
+    }
+  });
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
 
@@ -62,6 +119,14 @@ export const ExplorerView: React.FC<Props> = ({
       return [...prev, rootId];
     });
   }, [rootId]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem('explorer-expanded', JSON.stringify(expanded));
+    } catch (error) {
+      console.warn('Failed to persist explorer state', error);
+    }
+  }, [expanded]);
 
   useEffect(() => {
     if (!selectedPath) return;
@@ -116,23 +181,62 @@ export const ExplorerView: React.FC<Props> = ({
     return [];
   };
 
-  const renderNode = (node: FolderNode) => {
+  const renderNode = (node: FolderNode, depth = 0) => {
     const nodeId = node.path || rootId;
     const isActiveDropTarget = dropTarget === nodeId;
     const folderPath = node.path || '';
+    const isRoot = depth === 0;
+    const paddingLeft = LABEL_PADDING_LEFT + depth * LEVEL_INDENT_WIDTH;
+    const groupStyles = !isRoot
+      ? {
+          marginLeft: 18,
+          paddingLeft: 16,
+          position: 'relative',
+          '&:before': {
+            content: '""',
+            position: 'absolute',
+            left: 6,
+            top: 0,
+            bottom: 8,
+            borderLeft: '1px solid rgba(140,150,160,0.45)'
+          }
+        }
+      : {
+          marginLeft: 18,
+          paddingLeft: 16
+        };
+    const mediaCount = node.children.filter((child) => child.type === 'media').length;
 
     return (
       <TreeItem
         key={nodeId}
         itemId={nodeId}
+        sx={{
+          '& .MuiTreeItem-content': {
+            py: ROW_CONTENT_VERTICAL_PADDING,
+            px: 0,
+            alignItems: 'center'
+          },
+          '& .MuiTreeItem-iconContainer': {
+            minWidth: 16,
+            width: 16,
+            mr: TOGGLE_ICON_GAP,
+            alignItems: 'center',
+            justifyContent: 'center'
+          },
+          '& > .MuiTreeItem-group': groupStyles
+        }}
         label={
           <Stack
             direction="row"
             alignItems="center"
-            spacing={1}
+            spacing={1.25}
+            justifyContent="space-between"
             sx={{
-              px: 1,
-              py: 0.5,
+              flex: 1,
+              pr: 1,
+              pl: `${paddingLeft}px`,
+              py: ROW_VERTICAL_PADDING,
               borderRadius: 1,
               transition: 'background-color 120ms ease, border 120ms ease',
               border: isActiveDropTarget
@@ -170,16 +274,36 @@ export const ExplorerView: React.FC<Props> = ({
               onMoveMedias(dragged, folderPath);
             }}
           >
-            {iconForFolder(node)}
-            <Typography variant="body2" sx={{ fontWeight: node.path === selectedPath ? 700 : 500 }}>
-              {node.title || node.name}
-            </Typography>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ flex: 1, minWidth: 0 }}>
+              {iconForFolder(node)}
+              <Typography
+                variant="body2"
+                noWrap
+                sx={{ fontWeight: node.path === selectedPath ? 700 : 500, color: 'text.primary' }}
+              >
+                {node.title || node.name}
+              </Typography>
+            </Stack>
+            {mediaCount > 0 && (
+              <Avatar
+                sx={{
+                  width: 24,
+                  height: 24,
+                  fontSize: '0.7rem',
+                  bgcolor: 'rgba(145,158,171,0.24)',
+                  color: 'rgba(71,79,98,0.9)',
+                  fontWeight: 600
+                }}
+              >
+                {mediaCount}
+              </Avatar>
+            )}
           </Stack>
         }
       >
         {node.children
           .filter((child): child is FolderNode => child.type === 'folder')
-          .map((child) => renderNode(child))}
+          .map((child) => renderNode(child, depth + 1))}
       </TreeItem>
     );
   };
@@ -239,9 +363,12 @@ export const ExplorerView: React.FC<Props> = ({
       </Stack>
       <SimpleTreeView
         aria-label="explorateur"
-        slots={{ collapseIcon: ExpandMoreIcon, expandIcon: ChevronRightIcon }}
+        slots={{ collapseIcon: CollapseIcon, expandIcon: ExpandIcon, endIcon: LeafPlaceholder }}
         expandedItems={expanded}
-        onExpandedItemsChange={(_event, itemIds) => setExpanded(itemIds)}
+        onExpandedItemsChange={(_event, itemIds) => {
+          const normalized = Array.isArray(itemIds) ? itemIds.map((id) => (typeof id === 'string' ? id : String(id))) : [];
+          setExpanded(Array.from(new Set([rootId, ...normalized])));
+        }}
         selectedItems={selectedPath || rootId}
         onSelectedItemsChange={(_event, itemId) => {
           if (typeof itemId === 'string') {

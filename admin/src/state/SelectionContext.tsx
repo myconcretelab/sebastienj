@@ -7,6 +7,7 @@ export type Selection = {
   setFolderPath: (path: string) => void;
   setMediaPath: (path?: string) => void;
   setMediaSelection: (paths: string[], primary?: string) => void;
+  updateMediaPositions: (sourceFolder: string, moved: string[], nextPaths: string[]) => void;
 };
 
 const SelectionContext = createContext<Selection | undefined>(undefined);
@@ -43,6 +44,38 @@ export const SelectionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     [updateMediaSelection]
   );
 
+  const updateMediaPositions = useCallback(
+    (sourceFolder: string, moved: string[], nextPaths: string[]) => {
+      const normalize = (candidate: string) => candidate.trim().replace(/^\/+/, '');
+      const folderOf = (candidate: string) =>
+        candidate.includes('/') ? candidate.slice(0, candidate.lastIndexOf('/')) : '';
+
+      const sourceFolderNormalized = normalize(sourceFolder);
+      const movedNormalized = moved.map(normalize);
+
+      if (folderPath === sourceFolderNormalized) {
+        const movedInSource = new Set(
+          movedNormalized.filter((path) => folderOf(path) === sourceFolderNormalized)
+        );
+        if (movedInSource.size > 0) {
+          const remaining = mediaPaths.filter((path) => !movedInSource.has(path));
+          updateMediaSelection(remaining);
+        }
+      }
+
+      if (nextPaths.length === 0) {
+        return;
+      }
+
+      const destinationNormalized = folderOf(normalize(nextPaths[0]));
+      if (destinationNormalized && folderPath === destinationNormalized) {
+        const normalizedNext = nextPaths.map(normalize);
+        updateMediaSelection(normalizedNext, normalizedNext[normalizedNext.length - 1]);
+      }
+    },
+    [folderPath, mediaPaths, updateMediaSelection]
+  );
+
   const value = useMemo(
     () => ({
       folderPath,
@@ -50,9 +83,10 @@ export const SelectionProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       mediaPaths,
       setFolderPath,
       setMediaPath,
-      setMediaSelection
+      setMediaSelection,
+      updateMediaPositions
     }),
-    [folderPath, mediaPath, mediaPaths, setFolderPath, setMediaPath, setMediaSelection]
+    [folderPath, mediaPath, mediaPaths, setFolderPath, setMediaPath, setMediaSelection, updateMediaPositions]
   );
 
   return <SelectionContext.Provider value={value}>{children}</SelectionContext.Provider>;

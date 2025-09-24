@@ -44,6 +44,7 @@ export const MediaGrid: React.FC<Props> = ({
   } | null>(null);
 
   const selectionAnchorRef = useRef<string | null>(primarySelectedPath ?? null);
+  const dragPreviewRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     committedOrderRef.current = medias.map((media) => media.path);
@@ -127,6 +128,55 @@ export const MediaGrid: React.FC<Props> = ({
     [sortSelection, selectedPaths, primarySelectedPath, onSelectionChange]
   );
 
+  const createMultiDragPreview = (count: number) => {
+    const preview = document.createElement('div');
+    preview.style.position = 'fixed';
+    preview.style.top = '0';
+    preview.style.left = '0';
+    preview.style.pointerEvents = 'none';
+    preview.style.padding = '11px 16px';
+    preview.style.borderRadius = '10px';
+    preview.style.background = 'rgba(15, 23, 42, 0.92)';
+    preview.style.border = '1px solid rgba(61, 111, 217, 0.45)';
+    preview.style.boxShadow = '0 18px 32px rgba(9, 14, 35, 0.45)';
+    preview.style.color = '#fff';
+    preview.style.display = 'flex';
+    preview.style.alignItems = 'center';
+    preview.style.gap = '10px';
+    preview.style.fontSize = '13px';
+    preview.style.fontWeight = '600';
+    preview.style.letterSpacing = '0.3px';
+    preview.style.zIndex = '9999';
+
+    const badge = document.createElement('span');
+    badge.style.display = 'inline-flex';
+    badge.style.alignItems = 'center';
+    badge.style.justifyContent = 'center';
+    badge.style.width = '22px';
+    badge.style.height = '22px';
+    badge.style.borderRadius = '7px';
+    badge.style.background = 'rgba(255,255,255,0.22)';
+    badge.style.fontSize = '12px';
+    badge.textContent = count.toString();
+
+    const label = document.createElement('span');
+    label.textContent = count === 1 ? 'Déplacer 1 image' : `Déplacer ${count} images`;
+
+    preview.append(badge, label);
+    document.body.appendChild(preview);
+    dragPreviewRef.current = preview;
+    return preview;
+  };
+
+  const cleanupDragPreview = () => {
+    if (dragPreviewRef.current && dragPreviewRef.current.parentNode) {
+      dragPreviewRef.current.parentNode.removeChild(dragPreviewRef.current);
+    }
+    dragPreviewRef.current = null;
+  };
+
+  useEffect(() => cleanupDragPreview, []);
+
   const updatePreviewOrder = (nextOrder: string[]) => {
     setPreviewOrder((current) => {
       if (current) {
@@ -178,6 +228,7 @@ export const MediaGrid: React.FC<Props> = ({
     setDraggingId(null);
     setDragOverId(null);
     setTailActive(false);
+    cleanupDragPreview();
   };
 
   const handleTileClick = (event: React.MouseEvent<HTMLDivElement>, media: MediaNode) => {
@@ -369,10 +420,14 @@ export const MediaGrid: React.FC<Props> = ({
               event.dataTransfer.effectAllowed = 'move';
               event.dataTransfer.setData(MEDIA_DRAG_TYPE, JSON.stringify(dragPaths));
               event.dataTransfer.setData('text/plain', dragPaths.join('\n'));
-              const node = event.currentTarget;
-              const rect = node.getBoundingClientRect();
               if (event.dataTransfer.setDragImage) {
-                event.dataTransfer.setDragImage(node, rect.width / 2, rect.height / 2);
+                cleanupDragPreview();
+                if (dragPaths.length === 1) {
+                  event.dataTransfer.setDragImage(event.currentTarget, 5, 5);
+                } else {
+                  const preview = createMultiDragPreview(dragPaths.length);
+                  event.dataTransfer.setDragImage(preview, preview.offsetWidth / 2, preview.offsetHeight / 2);
+                }
               }
             }}
             onDragOver={(event: React.DragEvent<HTMLDivElement>) => {
