@@ -540,8 +540,11 @@ export const MediaGrid: React.FC<Props> = ({
               event.stopPropagation();
               setDragOverId(null);
               setTailActive(false);
-              if (draggingId === media.path) return;
               const finalOrder = previewOrder ?? mediaPaths;
+              if (draggingId === media.path && isSameOrder(finalOrder, committedOrderRef.current)) {
+                dropHandledRef.current = true;
+                return;
+              }
               dropHandledRef.current = true;
               commitOrder(finalOrder);
             }}
