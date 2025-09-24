@@ -9,6 +9,7 @@ interface Props {
   primarySelectedPath?: string;
   onSelectionChange: (paths: string[], primary?: string) => void;
   onReorder: (nextOrder: string[]) => void;
+  onOpenMedia?: (media: MediaNode) => void;
 }
 
 const MEDIA_DRAG_TYPE = 'application/x-media-path';
@@ -17,12 +18,22 @@ const THUMB_SIZE = 160;
 const isSameOrder = (a: string[], b: string[]) =>
   a.length === b.length && a.every((value, index) => value === b[index]);
 
+const buildMediaUrl = (input?: string) => {
+  if (!input) return undefined;
+  if (input.startsWith('/api/media')) return input;
+  const isAbsolute = /^(?:[a-z]+:)?\/\//i.test(input) || input.startsWith('data:') || input.startsWith('blob:');
+  if (isAbsolute) return input;
+  const normalized = input.startsWith('/') ? input : `/${input}`;
+  return `/api/media${normalized}`;
+};
+
 export const MediaGrid: React.FC<Props> = ({
   medias,
   selectedPaths,
   primarySelectedPath,
   onSelectionChange,
-  onReorder
+  onReorder,
+  onOpenMedia
 }) => {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -36,6 +47,7 @@ export const MediaGrid: React.FC<Props> = ({
   const marqueeBasePrimaryRef = useRef<string | undefined>(undefined);
   const containerRectRef = useRef<DOMRect | null>(null);
   const hasDraggedRef = useRef(false);
+  const lastTapRef = useRef<{ time: number; path?: string }>({ time: 0, path: undefined });
   const [marqueeRect, setMarqueeRect] = useState<{
     left: number;
     top: number;
@@ -396,7 +408,7 @@ export const MediaGrid: React.FC<Props> = ({
       {orderedMedias.map((media) => {
         const thumbnails = media.thumbnails && Object.keys(media.thumbnails).length > 0 ? media.thumbnails : undefined;
         const primary = thumbnails ? thumbnails.thumb || Object.values(thumbnails)[0] : undefined;
-        const previewPath = primary?.defaultPath;
+        const previewUrl = buildMediaUrl(primary?.defaultPath);
         const isDragging = draggingId === media.path;
         const isDragTarget = dragOverId === media.path;
         const isSelected = selectedSet.has(media.path);
@@ -407,6 +419,23 @@ export const MediaGrid: React.FC<Props> = ({
             data-role="thumbnail"
             data-path={media.path}
             onClick={(event) => handleTileClick(event, media)}
+            onDoubleClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              if (onOpenMedia) onOpenMedia(media);
+            }}
+            onTouchEnd={(event: React.TouchEvent<HTMLDivElement>) => {
+              if (event.touches.length > 0) return;
+              const now = Date.now();
+              if (lastTapRef.current.path === media.path && now - lastTapRef.current.time < 350) {
+                event.preventDefault();
+                event.stopPropagation();
+                if (onOpenMedia) onOpenMedia(media);
+                lastTapRef.current = { time: 0, path: undefined };
+              } else {
+                lastTapRef.current = { time: now, path: media.path };
+              }
+            }}
             draggable
             onDragStart={(event: React.DragEvent<HTMLDivElement>) => {
               const dragPaths = selectedSet.has(media.path) ? [...selectedPaths] : [media.path];
@@ -484,9 +513,9 @@ export const MediaGrid: React.FC<Props> = ({
               transition: 'opacity 120ms ease, outline 120ms ease, box-shadow 120ms ease'
             }}
           >
-            {previewPath ? (
+            {previewUrl ? (
               <img
-                src={`/api/media${previewPath}`}
+                src={previewUrl}
                 alt={media.title || media.name}
                 loading="lazy"
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}

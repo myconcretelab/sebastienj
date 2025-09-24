@@ -5,10 +5,10 @@ import {
   Button,
   CircularProgress,
   Dialog,
-  DialogActions,
   DialogContent,
   DialogTitle,
   Divider,
+  IconButton,
   Snackbar,
   Stack,
   Typography
@@ -26,6 +26,7 @@ import { BlogPage } from './BlogPage.js';
 import { SelectionProvider, useSelection } from '../state/SelectionContext.js';
 import { FolderNode, MediaNode, Settings } from '../api/types.js';
 import { LoginPage } from './LoginPage.js';
+import CloseIcon from '@mui/icons-material/CloseRounded';
 
 const findFolder = (root: FolderNode, path: string): FolderNode | undefined => {
   if (!path || root.path === path) return root;
@@ -49,6 +50,7 @@ const AdminView: React.FC<{ tree: FolderNode; settings: Settings }> = ({ tree, s
     updateMediaPositions
   } = useSelection();
   const [isFolderEditorOpen, setFolderEditorOpen] = useState(false);
+  const [isMediaEditorOpen, setMediaEditorOpen] = useState(false);
   const [isUploading, setUploading] = useState(false);
   const [dropActive, setDropActive] = useState(false);
   const dragCounter = useRef(0);
@@ -74,6 +76,20 @@ const AdminView: React.FC<{ tree: FolderNode; settings: Settings }> = ({ tree, s
     await api.createFolder(path);
     await api.refreshTree();
   };
+
+  const handleOpenMediaEditor = useCallback(
+    (media: MediaNode) => {
+      setMediaSelection([media.path], media.path);
+      setMediaEditorOpen(true);
+    },
+    [setMediaSelection, setMediaEditorOpen]
+  );
+
+  useEffect(() => {
+    if (!selectedMedia) {
+      setMediaEditorOpen(false);
+    }
+  }, [selectedMedia]);
 
   const handleDragEnter = useCallback((event: React.DragEvent<HTMLDivElement>) => {
     const items = event.dataTransfer?.items;
@@ -268,22 +284,9 @@ const AdminView: React.FC<{ tree: FolderNode; settings: Settings }> = ({ tree, s
                 primarySelectedPath={mediaPath}
                 onSelectionChange={(paths, primary) => setMediaSelection(paths, primary)}
                 onReorder={handleReorderMedias}
+                onOpenMedia={handleOpenMediaEditor}
               />
             </Box>
-
-            {mediaPaths.length === 1 && selectedMedia && (
-              <MediaEditor
-                media={selectedMedia}
-                settings={settings}
-                onSaveMetadata={(metadata) => api.saveMediaMeta(selectedMedia.path, metadata)}
-                onRename={(nextName) => api.renameMedia(selectedMedia.path, nextName)}
-                onMove={(destination) => handleMoveMedias([selectedMedia.path], destination)}
-                onDelete={async () => {
-                  await api.deleteMedia(selectedMedia.path);
-                  setMediaPath(undefined);
-                }}
-              />
-            )}
           </Stack>
         </Box>
       </Box>
@@ -322,19 +325,78 @@ const AdminView: React.FC<{ tree: FolderNode; settings: Settings }> = ({ tree, s
       </Box>
 
       <Dialog open={isFolderEditorOpen} onClose={() => setFolderEditorOpen(false)} maxWidth="md" fullWidth scroll="paper">
-        <DialogTitle>Édition du dossier</DialogTitle>
+        <DialogTitle
+          sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pr: 1 }}
+        >
+          <Typography component="span" variant="h6">
+            Édition du dossier
+          </Typography>
+          <IconButton aria-label="Fermer" onClick={() => setFolderEditorOpen(false)}>
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
         <DialogContent dividers sx={{ maxHeight: '70vh', overflowY: 'auto' }}>
           <FolderEditor
             folder={currentFolder}
             settings={settings}
             onSaveMetadata={(metadata) => api.saveFolderMeta(currentFolder.path, metadata)}
             onSaveDescription={(markdown) => api.saveFolderDescription(currentFolder.path, markdown)}
-            onRename={currentFolder.path ? (nextName) => api.renameFolder(currentFolder.path, nextName) : undefined}
           />
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setFolderEditorOpen(false)}>Fermer</Button>
-        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(selectedMedia) && isMediaEditorOpen}
+        onClose={() => setMediaEditorOpen(false)}
+        maxWidth={false}
+        fullWidth
+        scroll="paper"
+        PaperProps={{
+          sx: {
+            width: '80vw',
+            maxWidth: '80vw',
+            maxHeight: '80vh'
+          }
+        }}
+      >
+        {selectedMedia && (
+          <>
+            <DialogTitle
+              sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', pr: 1 }}
+            >
+              <Typography component="span" variant="h6">
+                Édition du média
+              </Typography>
+              <IconButton aria-label="Fermer" onClick={() => setMediaEditorOpen(false)}>
+                <CloseIcon />
+              </IconButton>
+            </DialogTitle>
+            <DialogContent dividers sx={{ p: 0, overflowY: 'auto', maxHeight: 'calc(80vh - 64px)' }}>
+              <Box sx={{ p: 3 }}>
+                <MediaEditor
+                  media={selectedMedia}
+                  settings={settings}
+                  onSaveMetadata={(metadata) => api.saveMediaMeta(selectedMedia.path, metadata)}
+                  onRename={async (nextName) => {
+                    const currentPath = selectedMedia.path;
+                    const parentFolder = currentPath.includes('/')
+                      ? currentPath.slice(0, currentPath.lastIndexOf('/'))
+                      : '';
+                    const nextPath = parentFolder ? `${parentFolder}/${nextName}` : nextName;
+                    await api.renameMedia(currentPath, nextName);
+                    setMediaSelection([nextPath], nextPath);
+                  }}
+                  onDelete={async () => {
+                    await api.deleteMedia(selectedMedia.path);
+                    setMediaPath(undefined);
+                    setMediaEditorOpen(false);
+                  }}
+                  onClose={() => setMediaEditorOpen(false)}
+                />
+              </Box>
+            </DialogContent>
+          </>
+        )}
       </Dialog>
 
       {uploadFeedback && (

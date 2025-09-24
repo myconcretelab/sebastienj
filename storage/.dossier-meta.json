@@ -1,10 +1,7 @@
 {
   "peintures": {
     "visibility": "public",
-    "mediaOrder": [
-      "peintures/Campeneac-04.jpg"
-    ],
-    "updatedAt": "2025-09-21T08:22:14.303Z",
+    "updatedAt": "2025-09-24T14:54:43.845Z",
     "createdAt": "2025-09-21T08:22:14.303Z"
   },
   "dessins/croquis": {
@@ -18,7 +15,10 @@
   },
   "dessins": {
     "visibility": "public",
-    "updatedAt": "2025-09-21T08:30:36.169Z",
+    "mediaOrder": [
+      "dessins/Campeneac-04.jpg"
+    ],
+    "updatedAt": "2025-09-24T14:54:43.848Z",
     "createdAt": "2025-09-21T08:30:36.169Z"
   },
   "dessins/paysages": {
@@ -65,17 +65,19 @@
       "croquis/Croquis 2023/Presqu'île de Rhuys/Rennes-St-Anne-2.jpg",
       "croquis/Croquis 2023/Presqu'île de Rhuys/carnet-A5-12.jpg",
       "croquis/Croquis 2023/Presqu'île de Rhuys/carnet-A5-22.jpg",
-      "croquis/Croquis 2023/Presqu'île de Rhuys/IMG_8470-scaled-e1707336771670.jpg"
+      "croquis/Croquis 2023/Presqu'île de Rhuys/IMG_8470-scaled-e1707336771670.jpg",
+      "croquis/Croquis 2023/Presqu'île de Rhuys/img_6240-1.jpg"
     ],
-    "updatedAt": "2025-09-24T06:02:35.524Z",
+    "updatedAt": "2025-09-24T14:54:01.254Z",
     "createdAt": "2025-09-23T10:08:07.670Z"
   },
   "croquis/Croquis 2023/Carnet du quotidien": {
     "visibility": "public",
     "mediaOrder": [
-      "croquis/Croquis 2023/Carnet du quotidien/IMG_7990-scaled.jpg"
+      "croquis/Croquis 2023/Carnet du quotidien/IMG_7990-scaled.jpg",
+      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-1.jpg"
     ],
-    "updatedAt": "2025-09-24T06:02:31.534Z",
+    "updatedAt": "2025-09-24T15:14:58.801Z",
     "createdAt": "2025-09-23T10:09:18.039Z"
   },
   "croquis/Croquis 2023/Vadrouille de dessin": {
@@ -84,15 +86,14 @@
       "croquis/Croquis 2023/Vadrouille de dessin/photo-grid-24-12-2023-09-50-44-0-e1707336691913.jpg",
       "croquis/Croquis 2023/Vadrouille de dessin/photo-grid-24-12-2023-09-50-44-1-e1707336665674.jpg",
       "croquis/Croquis 2023/Vadrouille de dessin/carnet-A5-23.jpg",
-      "croquis/Croquis 2023/Vadrouille de dessin/carnet-A5-25.jpg",
-      "croquis/Croquis 2023/Vadrouille de dessin/carnet.jpg"
+      "croquis/Croquis 2023/Vadrouille de dessin/carnet-A5-25.jpg"
     ],
-    "updatedAt": "2025-09-24T06:02:31.535Z",
+    "updatedAt": "2025-09-24T14:54:28.021Z",
     "createdAt": "2025-09-23T10:09:18.041Z"
   },
   "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc": {
     "visibility": "public",
-    "updatedAt": "2025-09-23T10:09:18.042Z",
+    "updatedAt": "2025-09-24T14:54:01.251Z",
     "createdAt": "2025-09-23T10:09:18.042Z"
   }
 }

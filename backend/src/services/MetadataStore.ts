@@ -141,15 +141,18 @@ export class MetadataStore {
     await this.writeBundle({ folders, medias });
   }
 
-  async upsertMediaMeta(relativePath: string, metadata: MediaMetadata) {
+  async upsertMediaMeta(relativePath: string, metadata: Partial<MediaMetadata>) {
     const { folders, medias } = await this.readAll();
     const key = toPosix(relativePath);
     const now = new Date().toISOString();
-    medias[key] = mediaMetadataSchema.parse({
+    const existing = medias[key];
+    const merged: Partial<MediaMetadata> = {
+      ...existing,
       ...metadata,
       updatedAt: now,
-      createdAt: medias[key]?.createdAt ?? now
-    });
+      createdAt: existing?.createdAt ?? now
+    };
+    medias[key] = mediaMetadataSchema.parse(merged);
     await this.writeBundle({ folders, medias });
   }
 

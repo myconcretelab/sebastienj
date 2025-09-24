@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
   Button,
@@ -52,6 +52,7 @@ export const ExplorerView: React.FC<Props> = ({
 }) => {
   const theme = useTheme();
   const accentColor = theme.palette.primary?.light || '#6f89a6';
+  const lastTouchRef = useRef<{ time: number; path?: string }>({ time: 0, path: undefined });
 
   const iconForFolder = (node: FolderNode) => {
     const iconProps = { sx: { fontSize: 18, color: accentColor } };
@@ -272,6 +273,25 @@ export const ExplorerView: React.FC<Props> = ({
               event.stopPropagation();
               setDropTarget(null);
               onMoveMedias(dragged, folderPath);
+            }}
+            onDoubleClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onSelect(folderPath);
+              onEditFolder();
+            }}
+            onTouchEnd={(event) => {
+              if (event.touches.length > 0) return;
+              const now = Date.now();
+              if (lastTouchRef.current.path === folderPath && now - lastTouchRef.current.time < 350) {
+                event.preventDefault();
+                event.stopPropagation();
+                onSelect(folderPath);
+                onEditFolder();
+                lastTouchRef.current = { time: 0, path: undefined };
+              } else {
+                lastTouchRef.current = { time: now, path: folderPath };
+              }
             }}
           >
             <Stack direction="row" alignItems="center" spacing={1} sx={{ flex: 1, minWidth: 0 }}>
