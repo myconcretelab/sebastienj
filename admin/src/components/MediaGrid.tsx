@@ -8,7 +8,7 @@ interface Props {
   selectedPaths: string[];
   primarySelectedPath?: string;
   onSelectionChange: (paths: string[], primary?: string) => void;
-  onReorder: (nextOrder: string[]) => void;
+  onReorder: (nextOrder: string[]) => void | Promise<void>;
   onOpenMedia?: (media: MediaNode) => void;
 }
 
@@ -27,6 +27,12 @@ const buildMediaUrl = (input?: string) => {
   return `/api/media${normalized}`;
 };
 
+const isPromise = <T = unknown>(value: unknown): value is Promise<T> =>
+  typeof value === 'object' &&
+  value !== null &&
+  'then' in (value as Record<string, unknown>) &&
+  typeof (value as Promise<T>).then === 'function';
+
 export const MediaGrid: React.FC<Props> = ({
   medias,
   selectedPaths,
@@ -40,6 +46,8 @@ export const MediaGrid: React.FC<Props> = ({
   const [tailActive, setTailActive] = useState(false);
   const [previewOrder, setPreviewOrder] = useState<string[] | null>(null);
   const committedOrderRef = useRef<string[]>([]);
+  const pendingOrderRef = useRef<string[] | null>(null);
+  const dropHandledRef = useRef(false);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const marqueeOriginRef = useRef<{ x: number; y: number } | null>(null);
@@ -59,8 +67,17 @@ export const MediaGrid: React.FC<Props> = ({
   const dragPreviewRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    committedOrderRef.current = medias.map((media) => media.path);
-    setPreviewOrder(null);
+    const nextOrder = medias.map((media) => media.path);
+    committedOrderRef.current = nextOrder;
+
+    const pendingOrder = pendingOrderRef.current;
+    if (!pendingOrder) {
+      setPreviewOrder(null);
+    } else if (isSameOrder(nextOrder, pendingOrder)) {
+      pendingOrderRef.current = null;
+      setPreviewOrder(null);
+    }
+
     setDraggingId(null);
     setDragOverId(null);
     setTailActive(false);
@@ -226,17 +243,46 @@ export const MediaGrid: React.FC<Props> = ({
 
   const commitOrder = (nextOrder: string[]) => {
     if (isSameOrder(nextOrder, committedOrderRef.current)) {
+      console.log('[MediaGrid] drop commit skipped (order unchanged)', {
+        nextOrder
+      });
       return;
     }
-    setPreviewOrder(nextOrder);
-    committedOrderRef.current = nextOrder;
-    onReorder(nextOrder);
+    const previousOrder = [...committedOrderRef.current];
+    const normalizedOrder = [...nextOrder];
+    console.log('[MediaGrid] drop commit', {
+      previousOrder,
+      nextOrder: normalizedOrder
+    });
+    pendingOrderRef.current = normalizedOrder;
+    setPreviewOrder(normalizedOrder);
+    committedOrderRef.current = normalizedOrder;
+    const result = onReorder(normalizedOrder);
+    if (isPromise(result)) {
+      result.catch(() => {
+        if (pendingOrderRef.current && isSameOrder(pendingOrderRef.current, normalizedOrder)) {
+          pendingOrderRef.current = null;
+          committedOrderRef.current = previousOrder;
+          setPreviewOrder(null);
+        }
+      });
+    }
   };
 
   const handleDragEnd = (event: React.DragEvent<HTMLDivElement>) => {
-    if (event.dataTransfer.dropEffect === 'none') {
+    const dropEffect = event.dataTransfer.dropEffect;
+    if (dropEffect !== 'none' && !dropHandledRef.current) {
+      const finalOrder = previewOrder ?? committedOrderRef.current;
+      console.log('[MediaGrid] drag end fallback commit', {
+        dropEffect,
+        finalOrder
+      });
+      commitOrder(finalOrder);
+    }
+    if (dropEffect === 'none') {
       setPreviewOrder(null);
     }
+    dropHandledRef.current = false;
     setDraggingId(null);
     setDragOverId(null);
     setTailActive(false);
@@ -449,6 +495,11 @@ export const MediaGrid: React.FC<Props> = ({
               event.dataTransfer.effectAllowed = 'move';
               event.dataTransfer.setData(MEDIA_DRAG_TYPE, JSON.stringify(dragPaths));
               event.dataTransfer.setData('text/plain', dragPaths.join('\n'));
+              console.log('[MediaGrid] drag start', {
+                draggingId: media.path,
+                dragPaths,
+                initialOrder: previewOrder ?? baseOrder
+              });
               if (event.dataTransfer.setDragImage) {
                 cleanupDragPreview();
                 if (dragPaths.length === 1) {
@@ -491,6 +542,7 @@ export const MediaGrid: React.FC<Props> = ({
               setTailActive(false);
               if (draggingId === media.path) return;
               const finalOrder = previewOrder ?? mediaPaths;
+              dropHandledRef.current = true;
               commitOrder(finalOrder);
             }}
             onDragEnd={handleDragEnd}
@@ -542,6 +594,7 @@ export const MediaGrid: React.FC<Props> = ({
           event.stopPropagation();
           setTailActive(false);
           const finalOrder = previewOrder ?? mediaPaths;
+          dropHandledRef.current = true;
           commitOrder(finalOrder);
         }}
         onDragLeave={(event: React.DragEvent<HTMLDivElement>) => {

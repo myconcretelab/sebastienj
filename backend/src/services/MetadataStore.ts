@@ -129,15 +129,34 @@ export class MetadataStore {
     return medias[toPosix(relativePath)];
   }
 
-  async upsertFolderMeta(relativePath: string, metadata: FolderMetadata) {
+  async upsertFolderMeta(
+    relativePath: string,
+    metadata: Partial<FolderMetadata>,
+    options?: { merge?: boolean }
+  ) {
     const { folders, medias } = await this.readAll();
     const key = toPosix(relativePath);
     const now = new Date().toISOString();
-    folders[key] = folderMetadataSchema.parse({
-      ...metadata,
+    const existing = folders[key];
+    const merge = options?.merge ?? true;
+
+    const base: Record<string, unknown> = merge && existing ? { ...existing } : {};
+
+    for (const [entryKey, value] of Object.entries(metadata)) {
+      if (value === undefined) {
+        delete base[entryKey];
+      } else {
+        base[entryKey] = value;
+      }
+    }
+
+    const parsed = folderMetadataSchema.parse({
+      ...base,
       updatedAt: now,
-      createdAt: folders[key]?.createdAt ?? now
+      createdAt: existing?.createdAt ?? now
     });
+
+    folders[key] = parsed;
     await this.writeBundle({ folders, medias });
   }
 

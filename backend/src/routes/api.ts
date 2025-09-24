@@ -321,12 +321,24 @@ router.post('/medias/order', async (req, res, next) => {
     const existingMeta = (await metadataStore.getFolderMeta(folderPath)) ?? undefined;
     const nextMeta = { ...(existingMeta ?? {}) } as FolderMetadata;
     if (uniqueOrder.length === 0) {
-      if (nextMeta.mediaOrder) {
-        delete nextMeta.mediaOrder;
+      let needsUpdate = false;
+      if ('mediaOrder' in nextMeta) {
+        nextMeta.mediaOrder = undefined;
+        needsUpdate = true;
+      }
+      if ('mediaPositions' in nextMeta) {
+        nextMeta.mediaPositions = undefined;
+        needsUpdate = true;
+      }
+      if (needsUpdate) {
         await metadataStore.upsertFolderMeta(folderPath, nextMeta);
       }
     } else {
       nextMeta.mediaOrder = uniqueOrder;
+      nextMeta.mediaPositions = uniqueOrder.reduce<Record<string, number>>((acc, path, index) => {
+        acc[path] = index + 1;
+        return acc;
+      }, {});
       await metadataStore.upsertFolderMeta(folderPath, nextMeta);
     }
 

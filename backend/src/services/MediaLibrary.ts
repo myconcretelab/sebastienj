@@ -3,7 +3,7 @@ import path from 'path';
 import matter from 'gray-matter';
 import mime from 'mime-types';
 import { MEDIA_ROOT } from '../config.js';
-import { MediaMetadata } from '../types/metadata.js';
+import { FolderMetadata, MediaMetadata } from '../types/metadata.js';
 import { metadataStore } from './MetadataStore.js';
 import { toPosix } from '../utils/pathUtils.js';
 import { cacheService } from './CacheService.js';
@@ -26,6 +26,7 @@ export interface FolderNode extends MediaNodeBase {
   icon?: string;
   coverMedia?: string;
   mediaOrder?: string[];
+  mediaPositions?: Record<string, number>;
 }
 
 export interface MediaLeaf extends MediaNodeBase {
@@ -38,6 +39,7 @@ export interface MediaLeaf extends MediaNodeBase {
   height?: number;
   orientation?: MediaMetadata['orientation'];
   thumbnails?: MediaMetadata['thumbnails'];
+  position?: number;
 }
 
 export type LibraryTree = FolderNode;
@@ -82,6 +84,54 @@ const sortMediasWithOrder = <T extends MediaNodeBase & { path: string }>(medias:
 };
 
 export class MediaLibrary {
+  private async ensureMediaPositions(
+    folderPath: string,
+    folderMeta: FolderMetadata | undefined,
+    medias: MediaLeaf[]
+  ): Promise<Record<string, number> | undefined> {
+    if (medias.length === 0) {
+      const hasExistingPositions = folderMeta?.mediaPositions && Object.keys(folderMeta.mediaPositions).length > 0;
+      if (hasExistingPositions) {
+        await metadataStore.upsertFolderMeta(folderPath, { mediaPositions: undefined });
+      }
+      return undefined;
+    }
+
+    const nextPositions: Record<string, number> = {};
+    medias.forEach((media, index) => {
+      const position = index + 1;
+      media.position = position;
+      nextPositions[media.path] = position;
+    });
+
+    const existingPositions = folderMeta?.mediaPositions ?? {};
+    const existingKeys = Object.keys(existingPositions);
+    let changed = existingKeys.length !== medias.length;
+
+    if (!changed) {
+      for (const media of medias) {
+        if (existingPositions[media.path] !== nextPositions[media.path]) {
+          changed = true;
+          break;
+        }
+      }
+      if (!changed) {
+        for (const key of existingKeys) {
+          if (!(key in nextPositions)) {
+            changed = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (changed) {
+      await metadataStore.upsertFolderMeta(folderPath, { mediaPositions: nextPositions });
+    }
+
+    return nextPositions;
+  }
+
   async tree(): Promise<LibraryTree> {
     const cached = cacheService.get<LibraryTree>('tree');
     if (cached) return cached;
@@ -149,10 +199,12 @@ export class MediaLibrary {
 
     const folderAbsolute = relative ? path.join(MEDIA_ROOT, relative) : MEDIA_ROOT;
     const description = await readDescription(folderAbsolute);
-    const folderMeta = folders[toPosix(relative)] || undefined;
+    const folderKey = toPosix(relative);
+    const folderMeta = folders[folderKey] || undefined;
 
     const orderedFolders = sortNodes(folderChildren);
     const orderedMedias = sortMediasWithOrder(mediaChildren, folderMeta?.mediaOrder);
+    const mediaPositions = await this.ensureMediaPositions(folderKey, folderMeta, orderedMedias);
     const children: Array<FolderNode | MediaLeaf> = [...orderedFolders, ...orderedMedias];
 
     const node: FolderNode = {
@@ -169,13 +221,15 @@ export class MediaLibrary {
       createdAt: folderMeta?.createdAt,
       icon: folderMeta?.icon,
       coverMedia: folderMeta?.coverMedia,
-      mediaOrder: folderMeta?.mediaOrder
+      mediaOrder: folderMeta?.mediaOrder,
+      mediaPositions: mediaPositions ?? folderMeta?.mediaPositions
     };
 
     return node;
   }
 
   async findOrphans() {
+    await this.walkFolder('');
     const { folders, medias } = await metadataStore.readAll();
     const existingFolders = new Set<string>();
     const existingMedias = new Set<string>();

@@ -182,8 +182,11 @@ export class FileService {
       if (!existingMeta || (!existingMeta.mediaOrder && Object.keys(baseMeta).length === 0)) {
         return;
       }
-      if (baseMeta.mediaOrder) {
-        delete baseMeta.mediaOrder;
+      if ('mediaOrder' in baseMeta) {
+        baseMeta.mediaOrder = undefined;
+      }
+      if ('mediaPositions' in baseMeta) {
+        baseMeta.mediaPositions = undefined;
       }
       await metadataStore.upsertFolderMeta(folderPath, baseMeta);
       return;
@@ -198,6 +201,10 @@ export class FileService {
       deduped.push(normalized);
     }
     baseMeta.mediaOrder = deduped;
+    baseMeta.mediaPositions = deduped.reduce<Record<string, number>>((acc, path, index) => {
+      acc[path] = index + 1;
+      return acc;
+    }, {});
     await metadataStore.upsertFolderMeta(folderPath, baseMeta);
   }
 

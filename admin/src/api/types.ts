@@ -23,6 +23,7 @@ export type FolderNode = {
   icon?: string;
   coverMedia?: string;
   mediaOrder?: string[];
+  mediaPositions?: Record<string, number>;
   children: Array<FolderNode | MediaNode>;
 };
 
@@ -64,6 +65,7 @@ export type MediaNode = {
   height?: number;
   orientation?: 'horizontal' | 'vertical' | 'square';
   thumbnails?: Record<string, MediaThumbnail>;
+  position?: number;
 };
 
 export type Settings = {

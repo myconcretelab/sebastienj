@@ -195,7 +195,14 @@ export class MediaMetadataSyncService {
     const nextOrder = order.filter((entry) => entry !== mediaPath);
     nextOrder.push(mediaPath);
 
-    const nextMeta: FolderMetadata = { ...meta, mediaOrder: nextOrder };
+    const nextMeta: FolderMetadata = {
+      ...meta,
+      mediaOrder: nextOrder,
+      mediaPositions: nextOrder.reduce<Record<string, number>>((acc, path, index) => {
+        acc[path] = index + 1;
+        return acc;
+      }, {})
+    };
     await metadataStore.upsertFolderMeta(normalizedFolder, nextMeta);
     return true;
   }
@@ -212,8 +219,13 @@ export class MediaMetadataSyncService {
 
     if (nextOrder.length > 0) {
       nextMeta.mediaOrder = nextOrder;
+      nextMeta.mediaPositions = nextOrder.reduce<Record<string, number>>((acc, path, index) => {
+        acc[path] = index + 1;
+        return acc;
+      }, {});
     } else {
-      delete nextMeta.mediaOrder;
+      nextMeta.mediaOrder = undefined;
+      nextMeta.mediaPositions = undefined;
     }
 
     await metadataStore.upsertFolderMeta(normalizedFolder, nextMeta);
