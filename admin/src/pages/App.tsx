@@ -39,7 +39,7 @@ const findFolder = (root: FolderNode, path: string): FolderNode | undefined => {
 };
 
 const AdminView: React.FC<{ tree: FolderNode; settings: Settings }> = ({ tree, settings }) => {
-  const { folderPath, mediaPath, setFolderPath, setMediaPath } = useSelection();
+  const { folderPath, mediaPath, mediaPaths, setFolderPath, setMediaPath, setMediaSelection } = useSelection();
   const [isFolderEditorOpen, setFolderEditorOpen] = useState(false);
   const [isUploading, setUploading] = useState(false);
   const [dropActive, setDropActive] = useState(false);
@@ -129,38 +129,70 @@ const AdminView: React.FC<{ tree: FolderNode; settings: Settings }> = ({ tree, s
     [currentFolder.path, currentFolderLabel]
   );
 
-  const handleMoveMedia = useCallback(
-    async (mediaPath: string, destinationFolder: string) => {
-      const normalizedMedia = mediaPath.trim().replace(/^\/+/, '');
+  const handleMoveMedias = useCallback(
+    async (mediaList: string[], destinationFolder: string) => {
+      if (mediaList.length === 0) return;
       const normalizedDestination = destinationFolder.trim().replace(/^\/+/, '');
-      if (!normalizedMedia) return;
-
-      const segments = normalizedMedia.split('/');
-      const fileName = segments.pop();
-      if (!fileName) return;
-      const sourceFolder = segments.join('/');
-
-      if (sourceFolder === normalizedDestination) return;
-
       const destinationLabel = normalizedDestination || 'la racine';
 
-      try {
-        await api.moveMedia(normalizedMedia, normalizedDestination);
-        setUploadFeedback({
-          severity: 'success',
-          message: `Image déplacée vers ${destinationLabel}.`
-        });
-        setFolderPath(normalizedDestination);
-        const nextMediaPath = normalizedDestination ? `${normalizedDestination}/${fileName}` : fileName;
-        setMediaPath(nextMediaPath);
-      } catch (error) {
+      const movedPaths: string[] = [];
+      const failures: string[] = [];
+
+      for (const mediaPathCandidate of mediaList) {
+        const normalizedMedia = mediaPathCandidate.trim().replace(/^\/+/, '');
+        if (!normalizedMedia) continue;
+
+        const segments = normalizedMedia.split('/');
+        const fileName = segments.pop();
+        if (!fileName) {
+          failures.push(mediaPathCandidate);
+          continue;
+        }
+        const sourceFolder = segments.join('/');
+
+        if (sourceFolder === normalizedDestination) {
+          const nextPath = normalizedDestination ? `${normalizedDestination}/${fileName}` : fileName;
+          movedPaths.push(nextPath);
+          continue;
+        }
+
+        try {
+          await api.moveMedia(normalizedMedia, normalizedDestination);
+          const nextPath = normalizedDestination ? `${normalizedDestination}/${fileName}` : fileName;
+          movedPaths.push(nextPath);
+        } catch (error) {
+          failures.push(normalizedMedia);
+        }
+      }
+
+      if (failures.length === mediaList.length) {
         setUploadFeedback({
           severity: 'error',
-          message: error instanceof Error ? error.message : 'Impossible de déplacer cette image.'
+          message: "Impossible de déplacer les éléments sélectionnés."
         });
+        return;
+      }
+
+      if (movedPaths.length > 0) {
+        if (failures.length > 0) {
+          setUploadFeedback({
+            severity: 'info',
+            message: `${movedPaths.length} image(s) déplacée(s) vers ${destinationLabel}, ${failures.length} échec(s).`
+          });
+        } else {
+          setUploadFeedback({
+            severity: 'success',
+            message:
+              movedPaths.length === 1
+                ? `Image déplacée vers ${destinationLabel}.`
+                : `${movedPaths.length} images déplacées vers ${destinationLabel}.`
+          });
+        }
+        setFolderPath(normalizedDestination);
+        setMediaSelection(movedPaths, movedPaths[movedPaths.length - 1]);
       }
     },
-    [setFolderPath, setMediaPath]
+    [setFolderPath, setMediaSelection]
   );
 
   const handleReorderMedias = useCallback(
@@ -212,7 +244,7 @@ const AdminView: React.FC<{ tree: FolderNode; settings: Settings }> = ({ tree, s
             onSelect={(path) => setFolderPath(path)}
             onCreateFolder={handleCreateFolder}
             onEditFolder={() => setFolderEditorOpen(true)}
-            onMoveMedia={handleMoveMedia}
+            onMoveMedias={handleMoveMedias}
           />
         </Box>
         <Divider orientation="vertical" flexItem variant="middle" />
@@ -224,8 +256,9 @@ const AdminView: React.FC<{ tree: FolderNode; settings: Settings }> = ({ tree, s
               </Typography>
               <MediaGrid
                 medias={medias}
-                selectedPath={selectedMedia?.path}
-                onSelect={(path) => setMediaPath(path)}
+                selectedPaths={mediaPaths}
+                primarySelectedPath={mediaPath}
+                onSelectionChange={(paths, primary) => setMediaSelection(paths, primary)}
                 onReorder={handleReorderMedias}
               />
             </Box>
@@ -236,7 +269,7 @@ const AdminView: React.FC<{ tree: FolderNode; settings: Settings }> = ({ tree, s
                 settings={settings}
                 onSaveMetadata={(metadata) => api.saveMediaMeta(selectedMedia.path, metadata)}
                 onRename={(nextName) => api.renameMedia(selectedMedia.path, nextName)}
-                onMove={(destination) => handleMoveMedia(selectedMedia.path, destination)}
+                onMove={(destination) => handleMoveMedias([selectedMedia.path], destination)}
                 onDelete={async () => {
                   await api.deleteMedia(selectedMedia.path);
                   setMediaPath(undefined);

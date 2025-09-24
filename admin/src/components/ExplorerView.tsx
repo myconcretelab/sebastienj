@@ -39,7 +39,7 @@ interface Props {
   onSelect: (path: string) => void;
   onCreateFolder: (path: string) => void;
   onEditFolder: () => void;
-  onMoveMedia: (mediaPath: string, destination: string) => void;
+  onMoveMedias: (mediaPaths: string[], destination: string) => void;
 }
 
 export const ExplorerView: React.FC<Props> = ({
@@ -48,7 +48,7 @@ export const ExplorerView: React.FC<Props> = ({
   onSelect,
   onCreateFolder,
   onEditFolder,
-  onMoveMedia
+  onMoveMedias
 }) => {
   const [newFolderName, setNewFolderName] = useState('');
   const rootId = tree.path || 'root';
@@ -91,6 +91,31 @@ export const ExplorerView: React.FC<Props> = ({
   const isMediaDrag = (event: React.DragEvent) =>
     Array.from(event.dataTransfer?.types ?? []).includes(MEDIA_DRAG_TYPE);
 
+  const readDraggedMediaPaths = (event: React.DragEvent): string[] => {
+    const raw = event.dataTransfer.getData(MEDIA_DRAG_TYPE);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed.filter((value): value is string => typeof value === 'string' && value.length > 0);
+      }
+      if (typeof parsed === 'string') {
+        return parsed ? [parsed] : [];
+      }
+    } catch (error) {
+      if (typeof raw === 'string') {
+        return raw
+          .split('\n')
+          .map((value) => value.trim())
+          .filter((value) => value.length > 0);
+      }
+    }
+    if (typeof raw === 'string' && raw.length > 0) {
+      return [raw];
+    }
+    return [];
+  };
+
   const renderNode = (node: FolderNode) => {
     const nodeId = node.path || rootId;
     const isActiveDropTarget = dropTarget === nodeId;
@@ -109,8 +134,11 @@ export const ExplorerView: React.FC<Props> = ({
               px: 1,
               py: 0.5,
               borderRadius: 1,
-              transition: 'background-color 120ms ease',
-              bgcolor: isActiveDropTarget ? 'rgba(111,137,166,0.16)' : 'transparent'
+              transition: 'background-color 120ms ease, border 120ms ease',
+              border: isActiveDropTarget
+                ? '1px solid rgba(61, 111, 217, 0.55)'
+                : '1px solid transparent',
+              bgcolor: isActiveDropTarget ? 'rgba(61,111,217,0.12)' : 'transparent'
             }}
             onDragOver={(event) => {
               if (!isMediaDrag(event)) return;
@@ -134,13 +162,12 @@ export const ExplorerView: React.FC<Props> = ({
             }}
             onDrop={(event) => {
               if (!isMediaDrag(event)) return;
+              const dragged = readDraggedMediaPaths(event);
+              if (dragged.length === 0) return;
               event.preventDefault();
               event.stopPropagation();
-              const mediaPath = event.dataTransfer.getData(MEDIA_DRAG_TYPE);
               setDropTarget(null);
-              if (mediaPath) {
-                onMoveMedia(mediaPath, folderPath);
-              }
+              onMoveMedias(dragged, folderPath);
             }}
           >
             {iconForFolder(node)}

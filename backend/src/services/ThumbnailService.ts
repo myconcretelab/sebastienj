@@ -55,6 +55,8 @@ export class ThumbnailService {
     if (!this.watcher) {
       this.startWatching();
     }
+
+    await this.syncMissingThumbnails();
   }
 
   private async readConfig(): Promise<ThumbnailConfig> {
@@ -112,6 +114,18 @@ export class ThumbnailService {
       const relative = relativeMediaPath(file);
       queue(relative, () => this.cleanupFor(relative));
     });
+  }
+
+  private async syncMissingThumbnails() {
+    const files = await this.collectImageFiles('');
+    const { medias } = await metadataStore.readAll();
+
+    for (const file of files) {
+      const meta = medias[file];
+      if (!meta?.thumbnails) {
+        await this.generateFor(file);
+      }
+    }
   }
 
   private isImageFile(absolutePath: string) {

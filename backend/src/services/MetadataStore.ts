@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
 import { FOLDER_META_FILE, MEDIA_META_FILE, METADATA_ROOT, SETTINGS_FILE } from '../config.js';
@@ -38,7 +39,7 @@ const writeJsonAtomic = async (file: string, data: unknown) => {
 
   const tempFile = path.join(
     directory,
-    `${path.basename(file)}.${process.pid}.${Date.now()}.tmp`
+    `${path.basename(file)}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`
   );
 
   const serialized = JSON.stringify(data, null, 2);
