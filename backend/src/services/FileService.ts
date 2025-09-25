@@ -47,69 +47,11 @@ export class FileService {
     return { changed: true, attributes: nextAttributes } as const;
   }
 
-  private updateThumbnailsForRename(
-    thumbnails: MediaMetadata['thumbnails'],
-    current: string,
-    next: string
-  ) {
-    if (!thumbnails) return { changed: false, thumbnails } as const;
-
-    const currentInfo = path.posix.parse(current);
-    const nextInfo = path.posix.parse(next);
-    const folder = currentInfo.dir ? `${currentInfo.dir}/` : '';
-    const nextFolder = nextInfo.dir ? `${nextInfo.dir}/` : folder;
-    const currentPrefix = `/thumbnails/${folder}${currentInfo.name}_`;
-    const nextPrefix = `/thumbnails/${nextFolder}${nextInfo.name}_`;
-
-    let changed = false;
-    const nextThumbnails: NonNullable<MediaMetadata['thumbnails']> = {};
-
-    for (const [key, entry] of Object.entries(thumbnails)) {
-      let entryChanged = false;
-      let defaultPath = entry.defaultPath;
-      if (typeof defaultPath === 'string') {
-        const normalized = toPosix(defaultPath);
-        if (normalized.startsWith(currentPrefix)) {
-          defaultPath = `${nextPrefix}${normalized.slice(currentPrefix.length)}`;
-          entryChanged = true;
-        }
-      }
-
-      const sources = entry.sources.map((source) => {
-        const normalized = toPosix(source.path);
-        if (normalized.startsWith(currentPrefix)) {
-          entryChanged = true;
-          return {
-            ...source,
-            path: `${nextPrefix}${normalized.slice(currentPrefix.length)}`
-          };
-        }
-        return source;
-      });
-
-      nextThumbnails[key] = entryChanged
-        ? { ...entry, defaultPath, sources }
-        : entry;
-      if (entryChanged) changed = true;
-    }
-
-    if (!changed) {
-      return { changed: false, thumbnails } as const;
-    }
-
-    return { changed: true, thumbnails: nextThumbnails } as const;
-  }
-
   private updateMediaSelfMetadata(meta: MediaMetadata, current: string, next: string): MediaMetadata {
     let updated = meta;
     const { changed: attrChanged, attributes } = this.replaceAttributeImageValues(meta.attributes, current, next);
     if (attrChanged) {
       updated = { ...updated, attributes };
-    }
-
-    const { changed: thumbnailsChanged, thumbnails } = this.updateThumbnailsForRename(meta.thumbnails, current, next);
-    if (thumbnailsChanged) {
-      updated = { ...updated, thumbnails };
     }
 
     if (updated === meta) {
