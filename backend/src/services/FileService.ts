@@ -223,14 +223,35 @@ export class FileService {
   }
 
   async renameFolder(relativePath: string, nextName: string) {
-    const absolute = buildAbsoluteMediaPath(relativePath);
-    const target = path.join(path.dirname(absolute), nextName);
-    await fs.rename(absolute, target);
+    const normalizedCurrent = toPosix(relativePath).replace(/^\/+/, '').replace(/\/+$/u, '');
+    if (!normalizedCurrent) {
+      throw new Error('Impossible de renommer la racine des médias.');
+    }
 
-    const parent = parentFolder(relativePath);
-    const oldKey = toPosix(relativePath).replace(/^\/+/, '');
-    const newKey = toPosix(path.posix.join(parent, nextName)).replace(/^\/+/, '');
-    const bundle = await metadataStore.readAll();
+    const sanitizedNext = toPosix(nextName).replace(/\/+$/u, '').replace(/^\/+/, '');
+    if (!sanitizedNext) {
+      throw new Error('Nom de dossier invalide.');
+    }
+
+    const currentParent = parentFolder(normalizedCurrent);
+    const candidateRelative = toPosix(path.posix.join(currentParent, sanitizedNext)).replace(/^\/+/, '');
+
+    if (candidateRelative === normalizedCurrent) {
+      return;
+    }
+
+    const absoluteCurrent = buildAbsoluteMediaPath(normalizedCurrent);
+    const absoluteTarget = buildAbsoluteMediaPath(candidateRelative);
+
+    const { folders, medias } = await metadataStore.readAll();
+    const folderEntries = Object.entries(folders);
+    const mediaEntries = Object.entries(medias);
+
+    await fs.mkdir(path.dirname(absoluteTarget), { recursive: true });
+    await fs.rename(absoluteCurrent, absoluteTarget);
+
+    const oldKey = normalizedCurrent;
+    const newKey = candidateRelative;
 
     const remapPath = (value: string) => {
       const normalized = toPosix(value).replace(/^\/+/, '');
@@ -306,8 +327,8 @@ export class FileService {
       return nextMeta;
     };
 
-    const updatedFolders: typeof bundle.folders = {};
-    for (const [key, value] of Object.entries(bundle.folders)) {
+    const updatedFolders: typeof folders = {};
+    for (const [key, value] of folderEntries) {
       if (key === oldKey || key.startsWith(`${oldKey}/`)) {
         const suffix = key.slice(oldKey.length);
         updatedFolders[`${newKey}${suffix}`] = remapFolderMetadata(value);
@@ -316,8 +337,8 @@ export class FileService {
       }
     }
 
-    const updatedMedias: typeof bundle.medias = {};
-    for (const [key, value] of Object.entries(bundle.medias)) {
+    const updatedMedias: typeof medias = {};
+    for (const [key, value] of mediaEntries) {
       if (key.startsWith(`${oldKey}/`)) {
         const suffix = key.slice(oldKey.length);
         updatedMedias[`${newKey}${suffix}`] = value;
@@ -328,9 +349,18 @@ export class FileService {
 
     await metadataStore.writeBundle({ folders: updatedFolders, medias: updatedMedias });
 
-    await this.updateFolderChildOrder(parent, (order) =>
+    await this.updateFolderChildOrder(currentParent, (order) =>
       order.map((entry) => (entry === oldKey ? newKey : entry))
     );
+
+    const nextParent = parentFolder(newKey);
+    if (nextParent !== currentParent) {
+      await this.updateFolderChildOrder(nextParent, (order) => {
+        const filtered = order.filter((entry) => entry !== newKey);
+        filtered.push(newKey);
+        return filtered;
+      });
+    }
   }
 
   async orderFolders(parentPath: string, order: string[]) {
