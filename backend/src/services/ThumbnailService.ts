@@ -1,4 +1,5 @@
 import chokidar from 'chokidar';
+import { randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import path from 'path';
 import sharp, { ResizeOptions } from 'sharp';
@@ -253,21 +254,32 @@ export class ThumbnailService {
     return width >= height ? 'horizontal' : 'vertical';
   }
 
-  private async removeExistingThumbnails(relativePath: string) {
-    const parsed = path.parse(relativePath);
-    const folder = path.join(THUMBNAILS_ROOT, parsed.dir);
-    try {
-      const entries = await fs.readdir(folder);
-      await Promise.all(
-        entries
-          .filter((name) => name.startsWith(`${parsed.name}_`))
-          .map((name) => fs.rm(path.join(folder, name), { force: true }))
-      );
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        throw error;
+  private async removeExistingThumbnails(existing?: MediaMetadata) {
+    const thumbnails = existing?.thumbnails;
+    if (!thumbnails) return;
+
+    const paths = new Set<string>();
+
+    for (const entry of Object.values(thumbnails)) {
+      if (entry.defaultPath) {
+        paths.add(toPosix(entry.defaultPath));
+      }
+      for (const source of entry.sources) {
+        if (source.path) {
+          paths.add(toPosix(source.path));
+        }
       }
     }
+
+    await Promise.all(
+      Array.from(paths).map(async (thumbnailPath) => {
+        const normalized = thumbnailPath.startsWith('/') ? thumbnailPath : `/${thumbnailPath}`;
+        if (!normalized.startsWith('/thumbnails/')) return;
+        const relative = normalized.slice('/thumbnails/'.length);
+        const absolute = path.join(THUMBNAILS_ROOT, relative);
+        await fs.rm(absolute, { force: true });
+      })
+    );
   }
 
   private async generateFor(relativePath: string) {
@@ -280,7 +292,11 @@ export class ThumbnailService {
       const presets = Object.entries(this.config.formats);
       const formats = resolveOutputFormats(this.config);
 
-      await this.removeExistingThumbnails(relativePath);
+      const currentMeta = await metadataStore.getMediaMeta(relativePath);
+      await this.removeExistingThumbnails(currentMeta);
+      const mediaId = currentMeta?.id ?? randomUUID();
+      const baseMeta: MediaMetadata =
+        currentMeta ?? ({ visibility: 'public' } as MediaMetadata);
 
       const thumbnailEntries: Record<string, MediaThumbnail> = {};
 
@@ -295,8 +311,8 @@ export class ThumbnailService {
         let outputHeight: number | undefined;
 
         for (const format of formats) {
-          const info = await this.writeThumbnail(relativePath, presetName, format, resizeOptions);
-          const relativeThumbPath = this.buildThumbnailPath(relativePath, presetName, format);
+          const info = await this.writeThumbnail(relativePath, mediaId, presetName, format, resizeOptions);
+          const relativeThumbPath = this.buildThumbnailPath(mediaId, presetName, format);
           sources.push({ format, path: relativeThumbPath, size: info.size });
           defaultPath = defaultPath || relativeThumbPath;
           outputWidth = info.width ?? outputWidth;
@@ -313,13 +329,12 @@ export class ThumbnailService {
         }
       }
 
-      const existing: MediaMetadata =
-        (await metadataStore.getMediaMeta(relativePath)) ?? ({ visibility: 'public' } as MediaMetadata);
       const next: MediaMetadata = {
-        ...existing,
-        visibility: existing.visibility ?? 'public',
-        width: width ?? existing.width,
-        height: height ?? existing.height,
+        ...baseMeta,
+        id: mediaId,
+        visibility: baseMeta.visibility ?? 'public',
+        width: width ?? baseMeta.width,
+        height: height ?? baseMeta.height,
         orientation,
         thumbnails: Object.keys(thumbnailEntries).length > 0 ? thumbnailEntries : undefined
       };
@@ -330,22 +345,21 @@ export class ThumbnailService {
     }
   }
 
-  private buildThumbnailPath(relativePath: string, preset: string, format: ThumbnailFormat) {
-    const parsed = path.parse(relativePath);
-    const fileName = `${parsed.name}_${preset}.${format}`;
-    return path.posix.join('/thumbnails', parsed.dir || '', fileName);
+  private buildThumbnailPath(mediaId: string, preset: string, format: ThumbnailFormat) {
+    const fileName = `${mediaId}.${format}`;
+    return path.posix.join('/thumbnails', preset, fileName);
   }
 
   private async writeThumbnail(
     relativePath: string,
+    mediaId: string,
     preset: string,
     format: ThumbnailFormat,
     resizeOptions: ResizeOptions
   ) {
-    const parsed = path.parse(relativePath);
-    const destinationFolder = path.join(THUMBNAILS_ROOT, parsed.dir);
+    const destinationFolder = path.join(THUMBNAILS_ROOT, preset);
     await fs.mkdir(destinationFolder, { recursive: true });
-    const fileName = `${parsed.name}_${preset}.${format}`;
+    const fileName = `${mediaId}.${format}`;
     const destination = path.join(destinationFolder, fileName);
 
     const pipeline = sharp(path.join(MEDIA_ROOT, relativePath)).rotate().resize(resizeOptions);
@@ -360,7 +374,8 @@ export class ThumbnailService {
   }
 
   private async cleanupFor(relativePath: string) {
-    await this.removeExistingThumbnails(relativePath);
+    const existing = await metadataStore.getMediaMeta(relativePath);
+    await this.removeExistingThumbnails(existing);
     await metadataStore.deleteMediaMeta(relativePath);
   }
 }

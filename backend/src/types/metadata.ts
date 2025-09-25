@@ -54,6 +54,7 @@ export const mediaThumbnailSchema = z.object({
 });
 
 export const mediaMetadataSchema = z.object({
+  id: z.string().uuid().optional(),
   title: z.string().optional(),
   description: z.string().optional(),
   tags: z.array(z.string()).optional(),
