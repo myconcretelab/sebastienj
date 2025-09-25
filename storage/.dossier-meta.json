@@ -8,24 +8,20 @@
     "visibility": "public",
     "mediaOrder": [
       "dessins/croquis/Campeneac-05.jpg",
-      "dessins/croquis/Campeneac-10"
+      "dessins/croquis/Campeneac-10",
+      "dessins/croquis/Campeneac-04.jpg"
     ],
     "mediaPositions": {
       "dessins/croquis/Campeneac-05.jpg": 1,
-      "dessins/croquis/Campeneac-10": 2
+      "dessins/croquis/Campeneac-10": 2,
+      "dessins/croquis/Campeneac-04.jpg": 3
     },
-    "updatedAt": "2025-09-24T16:56:32.469Z",
+    "updatedAt": "2025-09-25T14:56:39.263Z",
     "createdAt": "2025-09-21T08:22:29.808Z"
   },
   "dessins": {
     "visibility": "public",
-    "mediaOrder": [
-      "dessins/Campeneac-04.jpg"
-    ],
-    "mediaPositions": {
-      "dessins/Campeneac-04.jpg": 1
-    },
-    "updatedAt": "2025-09-24T16:56:32.471Z",
+    "updatedAt": "2025-09-25T14:56:39.260Z",
     "createdAt": "2025-09-21T08:30:36.169Z"
   },
   "dessins/paysages": {
@@ -64,39 +60,11 @@
   },
   "croquis/Croquis 2023": {
     "visibility": "public",
-    "updatedAt": "2025-09-25T13:57:45.498Z",
-    "createdAt": "2025-09-23T10:08:05.299Z"
-  },
-  "croquis/Croquis 2023/Carnet du quotidien": {
-    "visibility": "public",
     "mediaOrder": [
-      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-02-01-2024-10-43-35-1.jpg",
-      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-02-01-2024-10-34-42-0.jpg",
-      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-24-12-2023-09-49-23-1.jpg",
-      "croquis/Croquis 2023/Carnet du quotidien/carnet-A5-26.jpg",
-      "croquis/Croquis 2023/Carnet du quotidien/IMG_8093-scaled.jpg",
-      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-1.jpg",
-      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-25-10-2023-01-08-28-0.jpg",
-      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-24-12-2023-09-52-07-0-e1707336613515.jpg",
-      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-24-12-2023-09-51-13-1-e1707336642257.jpg",
-      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-24-12-2023-09-50-03-1-e1707336726559.jpg",
-      "croquis/Croquis 2023/Carnet du quotidien/carnet-A5-31.jpg"
+      "croquis/Croquis 2023/Carnet du quotidien"
     ],
-    "mediaPositions": {
-      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-02-01-2024-10-43-35-1.jpg": 1,
-      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-02-01-2024-10-34-42-0.jpg": 2,
-      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-24-12-2023-09-49-23-1.jpg": 3,
-      "croquis/Croquis 2023/Carnet du quotidien/carnet-A5-26.jpg": 4,
-      "croquis/Croquis 2023/Carnet du quotidien/IMG_8093-scaled.jpg": 5,
-      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-1.jpg": 6,
-      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-25-10-2023-01-08-28-0.jpg": 7,
-      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-24-12-2023-09-52-07-0-e1707336613515.jpg": 8,
-      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-24-12-2023-09-51-13-1-e1707336642257.jpg": 9,
-      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-24-12-2023-09-50-03-1-e1707336726559.jpg": 10,
-      "croquis/Croquis 2023/Carnet du quotidien/carnet-A5-31.jpg": 11
-    },
-    "updatedAt": "2025-09-25T13:24:55.070Z",
-    "createdAt": "2025-09-23T10:09:18.039Z"
+    "updatedAt": "2025-09-25T14:55:51.389Z",
+    "createdAt": "2025-09-23T10:08:05.299Z"
   },
   "croquis/Croquis 2023/Vadrouille de dessin": {
     "visibility": "public",
@@ -119,7 +87,7 @@
       "croquis/Croquis 2023/Vadrouille de dessin/Peniche0006.jpg": 10,
       "croquis/Croquis 2023/Vadrouille de dessin/vadrouille-A4.jpg": 11
     },
-    "updatedAt": "2025-09-24T16:56:32.464Z",
+    "updatedAt": "2025-09-25T14:55:51.384Z",
     "createdAt": "2025-09-23T10:09:18.041Z"
   },
   "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc": {
@@ -147,35 +115,66 @@
     "updatedAt": "2025-09-25T13:57:45.548Z",
     "createdAt": "2025-09-23T10:09:18.042Z"
   },
-  "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc/Presqu'île de Rhuys": {
+  "croquis/Croquis 2023/Carnet du quotidien": {
     "visibility": "public",
     "mediaOrder": [
-      "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc/Presqu'île de Rhuys/IMG_7990-scaled.jpg",
-      "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc/Presqu'île de Rhuys/IMG_8080-scaled.jpg",
-      "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc/Presqu'île de Rhuys/IMG_8470-scaled-e1707336771670.jpg",
-      "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc/Presqu'île de Rhuys/Keravelo-scaled.jpg",
-      "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc/Presqu'île de Rhuys/Rennes-St-Anne-2.jpg",
-      "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc/Presqu'île de Rhuys/Rennes-St-Anne.jpg",
-      "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc/Presqu'île de Rhuys/St-Jaques-scaled.jpg",
-      "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc/Presqu'île de Rhuys/carnet-A5-12.jpg",
-      "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc/Presqu'île de Rhuys/carnet-A5-22.jpg",
-      "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc/Presqu'île de Rhuys/golfe-scaled.jpg",
-      "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc/Presqu'île de Rhuys/img_6240-1.jpg"
+      "croquis/Croquis 2023/Carnet du quotidien/carnet-A5-31.jpg",
+      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-02-01-2024-10-43-35-1.jpg",
+      "croquis/Croquis 2023/Carnet du quotidien/IMG_8093-scaled.jpg",
+      "croquis/Croquis 2023/Carnet du quotidien/carnet-A5-26.jpg",
+      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-02-01-2024-10-34-42-0.jpg",
+      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-1.jpg",
+      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-24-12-2023-09-49-23-1.jpg",
+      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-24-12-2023-09-50-03-1-e1707336726559.jpg",
+      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-24-12-2023-09-51-13-1-e1707336642257.jpg",
+      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-24-12-2023-09-52-07-0-e1707336613515.jpg",
+      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-25-10-2023-01-08-28-0.jpg"
     ],
     "mediaPositions": {
-      "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc/Presqu'île de Rhuys/IMG_7990-scaled.jpg": 1,
-      "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc/Presqu'île de Rhuys/IMG_8080-scaled.jpg": 2,
-      "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc/Presqu'île de Rhuys/IMG_8470-scaled-e1707336771670.jpg": 3,
-      "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc/Presqu'île de Rhuys/Keravelo-scaled.jpg": 4,
-      "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc/Presqu'île de Rhuys/Rennes-St-Anne-2.jpg": 5,
-      "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc/Presqu'île de Rhuys/Rennes-St-Anne.jpg": 6,
-      "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc/Presqu'île de Rhuys/St-Jaques-scaled.jpg": 7,
-      "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc/Presqu'île de Rhuys/carnet-A5-12.jpg": 8,
-      "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc/Presqu'île de Rhuys/carnet-A5-22.jpg": 9,
-      "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc/Presqu'île de Rhuys/golfe-scaled.jpg": 10,
-      "croquis/Croquis 2023/Voyage Portugal-Espagne-Maroc/Presqu'île de Rhuys/img_6240-1.jpg": 11
+      "croquis/Croquis 2023/Carnet du quotidien/carnet-A5-31.jpg": 1,
+      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-02-01-2024-10-43-35-1.jpg": 2,
+      "croquis/Croquis 2023/Carnet du quotidien/IMG_8093-scaled.jpg": 3,
+      "croquis/Croquis 2023/Carnet du quotidien/carnet-A5-26.jpg": 4,
+      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-02-01-2024-10-34-42-0.jpg": 5,
+      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-1.jpg": 6,
+      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-24-12-2023-09-49-23-1.jpg": 7,
+      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-24-12-2023-09-50-03-1-e1707336726559.jpg": 8,
+      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-24-12-2023-09-51-13-1-e1707336642257.jpg": 9,
+      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-24-12-2023-09-52-07-0-e1707336613515.jpg": 10,
+      "croquis/Croquis 2023/Carnet du quotidien/photo-grid-25-10-2023-01-08-28-0.jpg": 11
     },
-    "updatedAt": "2025-09-25T13:57:45.681Z",
-    "createdAt": "2025-09-25T13:57:45.540Z"
+    "updatedAt": "2025-09-25T14:56:15.705Z",
+    "createdAt": "2025-09-25T14:55:51.382Z"
+  },
+  "croquis/Croquis 2023/Presqu'île de Rhuys": {
+    "visibility": "public",
+    "mediaOrder": [
+      "croquis/Croquis 2023/Presqu'île de Rhuys/carnet-A5-22.jpg",
+      "croquis/Croquis 2023/Presqu'île de Rhuys/carnet-A5-12.jpg",
+      "croquis/Croquis 2023/Presqu'île de Rhuys/img_6240-1.jpg",
+      "croquis/Croquis 2023/Presqu'île de Rhuys/IMG_7990-scaled.jpg",
+      "croquis/Croquis 2023/Presqu'île de Rhuys/IMG_8470-scaled-e1707336771670.jpg",
+      "croquis/Croquis 2023/Presqu'île de Rhuys/Keravelo-scaled.jpg",
+      "croquis/Croquis 2023/Presqu'île de Rhuys/Rennes-St-Anne-2.jpg",
+      "croquis/Croquis 2023/Presqu'île de Rhuys/St-Jaques-scaled.jpg",
+      "croquis/Croquis 2023/Presqu'île de Rhuys/golfe-scaled.jpg",
+      "croquis/Croquis 2023/Presqu'île de Rhuys/IMG_8080-scaled.jpg",
+      "croquis/Croquis 2023/Presqu'île de Rhuys/Rennes-St-Anne.jpg"
+    ],
+    "mediaPositions": {
+      "croquis/Croquis 2023/Presqu'île de Rhuys/carnet-A5-22.jpg": 1,
+      "croquis/Croquis 2023/Presqu'île de Rhuys/carnet-A5-12.jpg": 2,
+      "croquis/Croquis 2023/Presqu'île de Rhuys/img_6240-1.jpg": 3,
+      "croquis/Croquis 2023/Presqu'île de Rhuys/IMG_7990-scaled.jpg": 4,
+      "croquis/Croquis 2023/Presqu'île de Rhuys/IMG_8470-scaled-e1707336771670.jpg": 5,
+      "croquis/Croquis 2023/Presqu'île de Rhuys/Keravelo-scaled.jpg": 6,
+      "croquis/Croquis 2023/Presqu'île de Rhuys/Rennes-St-Anne-2.jpg": 7,
+      "croquis/Croquis 2023/Presqu'île de Rhuys/St-Jaques-scaled.jpg": 8,
+      "croquis/Croquis 2023/Presqu'île de Rhuys/golfe-scaled.jpg": 9,
+      "croquis/Croquis 2023/Presqu'île de Rhuys/IMG_8080-scaled.jpg": 10,
+      "croquis/Croquis 2023/Presqu'île de Rhuys/Rennes-St-Anne.jpg": 11
+    },
+    "updatedAt": "2025-09-25T15:39:40.357Z",
+    "createdAt": "2025-09-25T15:35:33.598Z"
   }
 }
