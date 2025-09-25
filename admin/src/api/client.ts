@@ -112,6 +112,10 @@ export const api = {
     await postJson('/api/medias/order', { folder, order });
     await mutate('/api/tree');
   },
+  async orderFolders(parent: string, order: string[]) {
+    await postJson('/api/folders/order', { parent, order });
+    await mutate('/api/tree');
+  },
   async updateSettings(settings: Settings) {
     await postJson('/api/settings', settings, 'PUT');
     await mutate('/api/settings');

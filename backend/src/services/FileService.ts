@@ -208,6 +208,49 @@ export class FileService {
     await metadataStore.upsertFolderMeta(folderPath, baseMeta);
   }
 
+  private async updateFolderChildOrder(
+    folderPath: string,
+    mutate: (order: string[]) => string[] | null | undefined
+  ): Promise<void> {
+    const normalizedFolder = toPosix(folderPath ?? '').replace(/^\/+/, '');
+    const existingMeta = (await metadataStore.getFolderMeta(normalizedFolder)) ?? undefined;
+    const baseMeta = { ...(existingMeta ?? {}) } as FolderMetadata;
+    const currentOrder = baseMeta.folderOrder ? [...baseMeta.folderOrder] : [];
+    const nextOrderRaw = mutate([...currentOrder]);
+
+    if (!nextOrderRaw || nextOrderRaw.length === 0) {
+      if (!existingMeta || (!existingMeta.folderOrder && Object.keys(baseMeta).length === 0)) {
+        return;
+      }
+      if ('folderOrder' in baseMeta) {
+        baseMeta.folderOrder = undefined;
+      }
+      if ('folderPositions' in baseMeta) {
+        baseMeta.folderPositions = undefined;
+      }
+      await metadataStore.upsertFolderMeta(normalizedFolder, baseMeta);
+      return;
+    }
+
+    const deduped: string[] = [];
+    const seen = new Set<string>();
+    for (const entry of nextOrderRaw) {
+      const normalized = toPosix(entry).replace(/^\/+/, '');
+      if (!normalized) continue;
+      if (seen.has(normalized)) continue;
+      seen.add(normalized);
+      deduped.push(normalized);
+    }
+
+    baseMeta.folderOrder = deduped;
+    baseMeta.folderPositions = deduped.reduce<Record<string, number>>((acc, path, index) => {
+      acc[path] = index + 1;
+      return acc;
+    }, {});
+
+    await metadataStore.upsertFolderMeta(normalizedFolder, baseMeta);
+  }
+
   async createFolder(relativePath: string) {
     const absolute = buildAbsoluteMediaPath(relativePath);
     await fs.mkdir(absolute, { recursive: true });
@@ -218,12 +261,23 @@ export class FileService {
         await metadataStore.upsertFolderMeta(parent, parentMeta ?? { visibility: 'public' });
       }
     }
+    const normalized = toPosix(relativePath).replace(/^\/+/, '');
+    await this.updateFolderChildOrder(parent, (order) => {
+      const filtered = order.filter((entry) => entry !== normalized);
+      filtered.push(normalized);
+      return filtered;
+    });
   }
 
   async deleteFolder(relativePath: string) {
     const absolute = buildAbsoluteMediaPath(relativePath);
     await fs.rm(absolute, { recursive: true, force: true });
     await metadataStore.deleteFolderMeta(relativePath);
+    const parent = parentFolder(relativePath);
+    const normalized = toPosix(relativePath).replace(/^\/+/, '');
+    await this.updateFolderChildOrder(parent, (order) =>
+      order.filter((entry) => entry !== normalized)
+    );
   }
 
   async renameFolder(relativePath: string, nextName: string) {
@@ -231,17 +285,92 @@ export class FileService {
     const target = path.join(path.dirname(absolute), nextName);
     await fs.rename(absolute, target);
 
-    const oldKey = toPosix(relativePath);
-    const newKey = toPosix(path.posix.join(parentFolder(relativePath), nextName));
+    const parent = parentFolder(relativePath);
+    const oldKey = toPosix(relativePath).replace(/^\/+/, '');
+    const newKey = toPosix(path.posix.join(parent, nextName)).replace(/^\/+/, '');
     const bundle = await metadataStore.readAll();
+
+    const remapPath = (value: string) => {
+      const normalized = toPosix(value).replace(/^\/+/, '');
+      if (normalized === oldKey || normalized.startsWith(`${oldKey}/`)) {
+        return `${newKey}${normalized.slice(oldKey.length)}`;
+      }
+      return normalized;
+    };
+
+    const remapFolderMetadata = (meta: FolderMetadata): FolderMetadata => {
+      let nextMeta: FolderMetadata = meta;
+
+      const ensureClone = () => {
+        if (nextMeta === meta) {
+          nextMeta = { ...meta };
+        }
+      };
+
+      if (meta.folderOrder) {
+        const mapped = meta.folderOrder.map(remapPath);
+        if (
+          mapped.length !== meta.folderOrder.length ||
+          mapped.some((entry, index) => entry !== meta.folderOrder![index])
+        ) {
+          ensureClone();
+          nextMeta.folderOrder = mapped;
+        }
+      }
+
+      if (meta.folderPositions) {
+        const mapped: Record<string, number> = {};
+        let positionsChanged = false;
+        for (const [entry, position] of Object.entries(meta.folderPositions)) {
+          const replacement = remapPath(entry);
+          mapped[replacement] = position;
+          if (replacement !== entry) {
+            positionsChanged = true;
+          }
+        }
+        if (positionsChanged) {
+          ensureClone();
+          nextMeta.folderPositions = mapped;
+        }
+      }
+
+      if (meta.mediaOrder) {
+        const mapped = meta.mediaOrder.map(remapPath);
+        if (
+          mapped.length !== meta.mediaOrder.length ||
+          mapped.some((entry, index) => entry !== meta.mediaOrder![index])
+        ) {
+          ensureClone();
+          nextMeta.mediaOrder = mapped;
+        }
+      }
+
+      if (meta.mediaPositions) {
+        const mapped: Record<string, number> = {};
+        let positionsChanged = false;
+        for (const [entry, position] of Object.entries(meta.mediaPositions)) {
+          const replacement = remapPath(entry);
+          mapped[replacement] = position;
+          if (replacement !== entry) {
+            positionsChanged = true;
+          }
+        }
+        if (positionsChanged) {
+          ensureClone();
+          nextMeta.mediaPositions = mapped;
+        }
+      }
+
+      return nextMeta;
+    };
 
     const updatedFolders: typeof bundle.folders = {};
     for (const [key, value] of Object.entries(bundle.folders)) {
       if (key === oldKey || key.startsWith(`${oldKey}/`)) {
         const suffix = key.slice(oldKey.length);
-        updatedFolders[`${newKey}${suffix}`] = value;
+        updatedFolders[`${newKey}${suffix}`] = remapFolderMetadata(value);
       } else {
-        updatedFolders[key] = value;
+        updatedFolders[key] = remapFolderMetadata(value);
       }
     }
 
@@ -256,6 +385,19 @@ export class FileService {
     }
 
     await metadataStore.writeBundle({ folders: updatedFolders, medias: updatedMedias });
+
+    await this.updateFolderChildOrder(parent, (order) =>
+      order.map((entry) => (entry === oldKey ? newKey : entry))
+    );
+  }
+
+  async orderFolders(parentPath: string, order: string[]) {
+    const normalizedParent = toPosix(parentPath ?? '').replace(/^\/+/, '');
+    const sanitized = order
+      .map((entry) => toPosix(entry).replace(/^\/+/, ''))
+      .filter((entry) => parentFolder(entry) === normalizedParent);
+
+    await this.updateFolderChildOrder(normalizedParent, () => sanitized);
   }
 
   async moveMedia(currentPath: string, nextFolder: string) {

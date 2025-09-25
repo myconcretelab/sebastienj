@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
   Button,
@@ -23,8 +23,9 @@ import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolderRounded';
 import EditIcon from '@mui/icons-material/EditRounded';
 import { FolderNode } from '../api/types.js';
 import { motion } from 'framer-motion';
-
-const MEDIA_DRAG_TYPE = 'application/x-media-path';
+import { useDndContext, useDndMonitor, useDroppable } from '@dnd-kit/core';
+import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 const LABEL_PADDING_LEFT = 4; // base left padding for folder label rows
 const LEVEL_INDENT_WIDTH = 15; // additional padding applied per depth level
 const TOGGLE_ICON_GAP = 0; // horizontal gap between the +/- toggle and folder labels (theme spacing units)
@@ -39,7 +40,7 @@ interface Props {
   onSelect: (path: string) => void;
   onCreateFolder: (path: string) => void;
   onEditFolder: () => void;
-  onMoveMedias: (mediaPaths: string[], destination: string) => void;
+  onReorderFolders?: (parentPath: string, order: string[]) => void;
 }
 
 export const ExplorerView: React.FC<Props> = ({
@@ -48,7 +49,7 @@ export const ExplorerView: React.FC<Props> = ({
   onSelect,
   onCreateFolder,
   onEditFolder,
-  onMoveMedias
+  onReorderFolders
 }) => {
   const theme = useTheme();
   const accentColor = theme.palette.primary?.light || '#6f89a6';
@@ -112,7 +113,54 @@ export const ExplorerView: React.FC<Props> = ({
     }
   });
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
-  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [pendingOrders, setPendingOrders] = useState<Record<string, string[]>>({});
+
+  useEffect(() => {
+    setPendingOrders({});
+  }, [tree]);
+
+  const folderChildrenMap = useMemo(() => {
+    const map = new Map<string, FolderNode[]>();
+    const visit = (node: FolderNode) => {
+      const key = node.path || '';
+      const children = node.children.filter((child): child is FolderNode => child.type === 'folder');
+      map.set(key, children);
+      children.forEach(visit);
+    };
+    visit(tree);
+    return map;
+  }, [tree]);
+
+  const getOrderedPaths = useCallback(
+    (parentPath: string, children: FolderNode[]) => {
+      const baseOrder = children.map((child) => child.path || '');
+      const preview = pendingOrders[parentPath];
+      if (!preview || preview.length === 0) {
+        return baseOrder;
+      }
+      const remaining = new Set(baseOrder);
+      const ordered: string[] = [];
+      preview.forEach((path) => {
+        if (remaining.has(path)) {
+          ordered.push(path);
+          remaining.delete(path);
+        }
+      });
+      baseOrder.forEach((path) => {
+        if (remaining.has(path)) {
+          ordered.push(path);
+          remaining.delete(path);
+        }
+      });
+      return ordered;
+    },
+    [pendingOrders]
+  );
+
+  const isSameOrder = useCallback((a: string[], b: string[]) => {
+    if (a.length !== b.length) return false;
+    return a.every((value, index) => value === b[index]);
+  }, []);
 
   useEffect(() => {
     setExpanded((prev) => {
@@ -154,37 +202,12 @@ export const ExplorerView: React.FC<Props> = ({
     });
   }, [selectedPath, rootId]);
 
-  const isMediaDrag = (event: React.DragEvent) =>
-    Array.from(event.dataTransfer?.types ?? []).includes(MEDIA_DRAG_TYPE);
-
-  const readDraggedMediaPaths = (event: React.DragEvent): string[] => {
-    const raw = event.dataTransfer.getData(MEDIA_DRAG_TYPE);
-    if (!raw) return [];
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return parsed.filter((value): value is string => typeof value === 'string' && value.length > 0);
-      }
-      if (typeof parsed === 'string') {
-        return parsed ? [parsed] : [];
-      }
-    } catch (error) {
-      if (typeof raw === 'string') {
-        return raw
-          .split('\n')
-          .map((value) => value.trim())
-          .filter((value) => value.length > 0);
-      }
-    }
-    if (typeof raw === 'string' && raw.length > 0) {
-      return [raw];
-    }
-    return [];
-  };
-
-  const renderNode = (node: FolderNode, depth = 0) => {
+  const FolderTreeItem: React.FC<{ node: FolderNode; depth: number; parentPath: string }> = ({
+    node,
+    depth,
+    parentPath
+  }) => {
     const nodeId = node.path || rootId;
-    const isActiveDropTarget = dropTarget === nodeId;
     const folderPath = node.path || '';
     const isRoot = depth === 0;
     const paddingLeft = LABEL_PADDING_LEFT + depth * LEVEL_INDENT_WIDTH;
@@ -208,6 +231,61 @@ export const ExplorerView: React.FC<Props> = ({
         };
     const mediaCount = node.children.filter((child) => child.type === 'media').length;
 
+    const { active } = useDndContext();
+    const activeType = (active?.data?.current as { type?: string } | undefined)?.type;
+    const isMediaDrag = activeType === 'media';
+
+    const { setNodeRef: setMediaDropRef, isOver: isMediaDropOver } = useDroppable({
+      id: `media-target:${nodeId}`,
+      data: { type: 'folder', path: folderPath }
+    });
+
+    const {
+      setNodeRef: setSortableRef,
+      attributes,
+      listeners,
+      transform,
+      transition,
+      isDragging
+    } = useSortable({
+      id: nodeId,
+      data: { type: 'folder-node', path: folderPath, parent: parentPath },
+      disabled: isRoot
+    });
+
+    const combinedRef = useCallback(
+      (element: HTMLElement | null) => {
+        setSortableRef(element);
+        setMediaDropRef(element);
+      },
+      [setSortableRef, setMediaDropRef]
+    );
+
+    const sortableStyle = isRoot
+      ? undefined
+      : ({
+          transform: CSS.Transform.toString(transform),
+          transition,
+          cursor: isDragging ? 'grabbing' : 'grab'
+        } as React.CSSProperties);
+
+    const childFolders = useMemo(() => {
+      const folders = node.children.filter((child): child is FolderNode => child.type === 'folder');
+      if (folders.length === 0) return [] as FolderNode[];
+      const orderedPaths = getOrderedPaths(folderPath, folders);
+      const map = new Map(folders.map((child) => [child.path || '', child]));
+      const ordered: FolderNode[] = [];
+      orderedPaths.forEach((path) => {
+        const entry = map.get(path);
+        if (entry) {
+          ordered.push(entry);
+          map.delete(path);
+        }
+      });
+      map.forEach((remaining) => ordered.push(remaining));
+      return ordered;
+    }, [node.children, folderPath, getOrderedPaths]);
+
     return (
       <TreeItem
         key={nodeId}
@@ -229,6 +307,7 @@ export const ExplorerView: React.FC<Props> = ({
         }}
         label={
           <Stack
+            ref={combinedRef}
             direction="row"
             alignItems="center"
             spacing={1.25}
@@ -239,41 +318,15 @@ export const ExplorerView: React.FC<Props> = ({
               pl: `${paddingLeft}px`,
               py: ROW_VERTICAL_PADDING,
               borderRadius: 1,
-              transition: 'background-color 120ms ease, border 120ms ease',
-              border: isActiveDropTarget
-                ? '1px solid rgba(61, 111, 217, 0.55)'
-                : '1px solid transparent',
-              bgcolor: isActiveDropTarget ? 'rgba(61,111,217,0.12)' : 'transparent'
+              transition: 'background-color 120ms ease, border 120ms ease, opacity 120ms ease',
+              border:
+                (isMediaDropOver && isMediaDrag) || isDragging
+                  ? '1px solid rgba(61, 111, 217, 0.55)'
+                  : '1px solid transparent',
+              bgcolor: isMediaDropOver && isMediaDrag ? 'rgba(61,111,217,0.12)' : 'transparent',
+              opacity: isDragging ? 0.65 : 1
             }}
-            onDragOver={(event) => {
-              if (!isMediaDrag(event)) return;
-              event.preventDefault();
-              event.stopPropagation();
-              event.dataTransfer.dropEffect = 'move';
-              setDropTarget(nodeId);
-            }}
-            onDragEnter={(event) => {
-              if (!isMediaDrag(event)) return;
-              event.preventDefault();
-              event.stopPropagation();
-              setDropTarget(nodeId);
-            }}
-            onDragLeave={(event) => {
-              if (!isMediaDrag(event)) return;
-              const related = event.relatedTarget as Node | null;
-              if (!related || !event.currentTarget.contains(related)) {
-                setDropTarget((current) => (current === nodeId ? null : current));
-              }
-            }}
-            onDrop={(event) => {
-              if (!isMediaDrag(event)) return;
-              const dragged = readDraggedMediaPaths(event);
-              if (dragged.length === 0) return;
-              event.preventDefault();
-              event.stopPropagation();
-              setDropTarget(null);
-              onMoveMedias(dragged, folderPath);
-            }}
+            style={sortableStyle}
             onDoubleClick={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -293,6 +346,8 @@ export const ExplorerView: React.FC<Props> = ({
                 lastTouchRef.current = { time: now, path: folderPath };
               }
             }}
+            {...attributes}
+            {...listeners}
           >
             <Stack direction="row" alignItems="center" spacing={1} sx={{ flex: 1, minWidth: 0 }}>
               {iconForFolder(node)}
@@ -321,9 +376,21 @@ export const ExplorerView: React.FC<Props> = ({
           </Stack>
         }
       >
-        {node.children
-          .filter((child): child is FolderNode => child.type === 'folder')
-          .map((child) => renderNode(child, depth + 1))}
+        {childFolders.length > 0 && (
+          <SortableContext
+            items={childFolders.map((child) => child.path || `${folderPath}/${child.name}`)}
+            strategy={verticalListSortingStrategy}
+          >
+            {childFolders.map((child) => (
+              <FolderTreeItem
+                key={child.path || child.name}
+                node={child}
+                depth={depth + 1}
+                parentPath={folderPath}
+              />
+            ))}
+          </SortableContext>
+        )}
       </TreeItem>
     );
   };
@@ -349,6 +416,84 @@ export const ExplorerView: React.FC<Props> = ({
     visit(tree);
     return count;
   }, [tree]);
+
+  useDndMonitor({
+    onDragEnd: ({ active, over }) => {
+      const activeData = active.data?.current as
+        | { type?: string; path?: string; parent?: string }
+        | undefined;
+      if (activeData?.type !== 'folder-node' || !activeData.path || activeData.parent === undefined) {
+        return;
+      }
+
+      const parentPath = activeData.parent;
+
+      if (!over) {
+        setPendingOrders((prev) => {
+          if (!prev[parentPath]) return prev;
+          const next = { ...prev };
+          delete next[parentPath];
+          return next;
+        });
+        return;
+      }
+
+      const overData = over.data?.current as
+        | { type?: string; path?: string; parent?: string }
+        | undefined;
+      if (overData?.type !== 'folder-node' || !overData.path || overData.parent !== parentPath) {
+        setPendingOrders((prev) => {
+          if (!prev[parentPath]) return prev;
+          const next = { ...prev };
+          delete next[parentPath];
+          return next;
+        });
+        return;
+      }
+
+      const siblings = folderChildrenMap.get(parentPath) ?? [];
+      if (siblings.length === 0) return;
+
+      const currentOrder = getOrderedPaths(parentPath, siblings);
+      const fromIndex = currentOrder.indexOf(activeData.path);
+      const toIndex = currentOrder.indexOf(overData.path);
+      if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) {
+        return;
+      }
+
+      const nextOrder = arrayMove(currentOrder, fromIndex, toIndex);
+      const baseOrder = siblings.map((child) => child.path || '');
+
+      setPendingOrders((prev) => {
+        const copy = { ...prev };
+        if (isSameOrder(nextOrder, baseOrder)) {
+          delete copy[parentPath];
+          return copy;
+        }
+        copy[parentPath] = nextOrder;
+        return copy;
+      });
+
+      if (!isSameOrder(nextOrder, baseOrder)) {
+        onReorderFolders?.(parentPath, nextOrder);
+      }
+    },
+    onDragCancel: ({ active }) => {
+      const activeData = active.data?.current as
+        | { type?: string; parent?: string }
+        | undefined;
+      if (activeData?.type !== 'folder-node' || activeData.parent === undefined) {
+        return;
+      }
+      const parentPath = activeData.parent;
+      setPendingOrders((prev) => {
+        if (!prev[parentPath]) return prev;
+        const next = { ...prev };
+        delete next[parentPath];
+        return next;
+      });
+    }
+  });
 
   const hasSelection = selectedPath !== undefined && selectedPath !== null;
   const targetLabel = hasSelection && selectedPath ? selectedPath : 'la racine';
@@ -397,7 +542,9 @@ export const ExplorerView: React.FC<Props> = ({
         }}
         sx={{ flex: 1, overflowY: 'auto', pr: 1 }}
       >
-        {renderNode(tree)}
+        <SortableContext items={[tree.path || rootId]} strategy={verticalListSortingStrategy}>
+          <FolderTreeItem node={tree} depth={0} parentPath="" />
+        </SortableContext>
       </SimpleTreeView>
       <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} fullWidth maxWidth="xs">
         <DialogTitle>Nouveau dossier</DialogTitle>

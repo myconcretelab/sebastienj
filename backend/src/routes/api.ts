@@ -273,6 +273,11 @@ const reorderMediaSchema = z.object({
   order: z.array(z.string())
 });
 
+const reorderFolderSchema = z.object({
+  parent: z.string().optional(),
+  order: z.array(z.string())
+});
+
 router.post('/medias/rename', async (req, res, next) => {
   try {
     const { path, name } = renameMediaSchema.parse(req.body);
@@ -342,6 +347,30 @@ router.post('/medias/order', async (req, res, next) => {
       await metadataStore.upsertFolderMeta(folderPath, nextMeta);
     }
 
+    cacheService.clear();
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/folders/order', async (req, res, next) => {
+  try {
+    const { parent, order } = reorderFolderSchema.parse(req.body ?? {});
+    const parentPath = parent ? toPosix(parent).replace(/^\/+/, '') : '';
+    const sanitized = order
+      .map((item) => toPosix(item).replace(/^\/+/, ''))
+      .filter((item) => parentFolder(item) === parentPath);
+
+    const uniqueOrder: string[] = [];
+    const seen = new Set<string>();
+    for (const entry of sanitized) {
+      if (seen.has(entry)) continue;
+      seen.add(entry);
+      uniqueOrder.push(entry);
+    }
+
+    await fileService.orderFolders(parentPath, uniqueOrder);
     cacheService.clear();
     res.json({ success: true });
   } catch (error) {
