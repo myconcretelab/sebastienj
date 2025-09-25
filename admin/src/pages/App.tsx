@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   Box,
-  Button,
   CircularProgress,
   Dialog,
   DialogContent,
@@ -13,6 +12,16 @@ import {
   Stack,
   Typography
 } from '@mui/material';
+import {
+  DndContext,
+  DragEndEvent,
+  DragStartEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors
+} from '@dnd-kit/core';
+import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { Routes, Route } from 'react-router-dom';
 import { useTree, useSettings, api, useAdminSession } from '../api/client.js';
 import { Toolbar } from '../components/Toolbar.js';
@@ -39,6 +48,11 @@ const findFolder = (root: FolderNode, path: string): FolderNode | undefined => {
   return undefined;
 };
 
+type DropTargetData =
+  | { type: 'media'; path: string }
+  | { type: 'media-tail' }
+  | { type: 'folder'; path: string };
+
 const AdminView: React.FC<{ tree: FolderNode; settings: Settings }> = ({ tree, settings }) => {
   const {
     folderPath,
@@ -54,6 +68,7 @@ const AdminView: React.FC<{ tree: FolderNode; settings: Settings }> = ({ tree, s
   const [isUploading, setUploading] = useState(false);
   const [dropActive, setDropActive] = useState(false);
   const dragCounter = useRef(0);
+  const draggingPathsRef = useRef<string[]>([]);
   const [uploadFeedback, setUploadFeedback] = useState<{
     message: string;
     severity: 'success' | 'error' | 'info';
@@ -70,6 +85,14 @@ const AdminView: React.FC<{ tree: FolderNode; settings: Settings }> = ({ tree, s
     currentFolder
   ]);
   const selectedMedia = medias.find((media) => media.path === mediaPath);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 }
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates
+    })
+  );
   const currentFolderLabel = currentFolder.path ? currentFolder.path : 'la racine';
 
   const handleCreateFolder = async (path: string) => {
@@ -239,19 +262,87 @@ const AdminView: React.FC<{ tree: FolderNode; settings: Settings }> = ({ tree, s
     [currentFolder.path, currentFolder.title, currentFolder.name]
   );
 
+  const handleReorderFolders = useCallback(
+    async (parentPath: string, order: string[]) => {
+      try {
+        await api.orderFolders(parentPath, order);
+        const target = parentPath ? findFolder(tree, parentPath) : tree;
+        const label = target?.title || target?.name || 'la racine';
+        setUploadFeedback({
+          severity: 'success',
+          message: `Ordre des dossiers mis à jour pour ${label}.`
+        });
+      } catch (error) {
+        setUploadFeedback({
+          severity: 'error',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'Impossible de réordonner les dossiers.'
+        });
+      }
+    },
+    [tree, setUploadFeedback]
+  );
+
+  const handleDragStart = useCallback(
+    (event: DragStartEvent) => {
+      const activeId = String(event.active.id);
+      if (mediaPaths.includes(activeId) && mediaPaths.length > 0) {
+        draggingPathsRef.current = [...mediaPaths];
+        return;
+      }
+      draggingPathsRef.current = [activeId];
+      setMediaSelection([activeId], activeId);
+    },
+    [mediaPaths, setMediaSelection]
+  );
+
+  const handleDragCancel = useCallback(() => {
+    draggingPathsRef.current = [];
+  }, []);
+
+  const handleDragEnd = useCallback(
+    async (event: DragEndEvent) => {
+      const { active, over } = event;
+      const activeId = String(active.id);
+      const selection = draggingPathsRef.current.length
+        ? Array.from(new Set(draggingPathsRef.current))
+        : [activeId];
+      draggingPathsRef.current = [];
+
+      if (!over) {
+        return;
+      }
+
+      const dropData = over.data?.current as DropTargetData | undefined;
+
+      if (dropData?.type === 'folder') {
+        await handleMoveMedias(selection, dropData.path ?? '');
+      }
+    },
+    [handleMoveMedias]
+  );
+
   const handleFeedbackClose = useCallback((_: unknown, reason?: string) => {
     if (reason === 'clickaway') return;
     setUploadFeedback(null);
   }, []);
 
   return (
-    <Stack
-      sx={{ height: '100vh', position: 'relative' }}
-      onDragEnter={handleDragEnter}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
+    <DndContext
+      sensors={sensors}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
     >
+      <Stack
+        sx={{ height: '100vh', position: 'relative' }}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
       <Toolbar
         onRefresh={() => api.refreshTree()}
         onNewFolder={() => {
@@ -268,16 +359,18 @@ const AdminView: React.FC<{ tree: FolderNode; settings: Settings }> = ({ tree, s
             onSelect={(path) => setFolderPath(path)}
             onCreateFolder={handleCreateFolder}
             onEditFolder={() => setFolderEditorOpen(true)}
-            onMoveMedias={handleMoveMedias}
+            onReorderFolders={handleReorderFolders}
           />
         </Box>
         <Divider orientation="vertical" flexItem variant="middle" />
         <Box sx={{ flex: 1, overflowY: 'auto', p: 4 }}>
           <Stack spacing={4}>
             <Box>
-              <Typography variant="h6" sx={{ mb: 2 }}>
-                Médias ({medias.length})
-              </Typography>
+              <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
+                <Typography variant="h6">
+                  Médias ({medias.length})
+                </Typography>
+              </Stack>
               <MediaGrid
                 medias={medias}
                 selectedPaths={mediaPaths}
@@ -412,6 +505,7 @@ const AdminView: React.FC<{ tree: FolderNode; settings: Settings }> = ({ tree, s
         </Snackbar>
       )}
     </Stack>
+    </DndContext>
   );
 };
 

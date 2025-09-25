@@ -24,6 +24,8 @@ export type FolderNode = {
   coverMedia?: string;
   mediaOrder?: string[];
   mediaPositions?: Record<string, number>;
+  folderOrder?: string[];
+  folderPositions?: Record<string, number>;
   children: Array<FolderNode | MediaNode>;
 };
 

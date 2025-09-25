@@ -26,6 +26,8 @@ export const folderMetadataSchema = z.object({
   attributes: z.record(attributeValueSchema).optional(),
   mediaOrder: z.array(z.string()).optional(),
   mediaPositions: z.record(z.number()).optional(),
+  folderOrder: z.array(z.string()).optional(),
+  folderPositions: z.record(z.number()).optional(),
   updatedAt: z.string().optional(),
   createdAt: z.string().optional()
 });

@@ -69,6 +69,22 @@ const isHiddenFile = (name: string) => name.startsWith('.');
 const sortNodes = <T extends MediaNodeBase>(nodes: T[]) =>
   nodes.sort((a, b) => (a.title || a.name).localeCompare(b.title || b.name, 'fr'));
 
+const sortFoldersWithOrder = <T extends MediaNodeBase & { path: string }>(folders: T[], order?: string[]) => {
+  if (!order || order.length === 0) {
+    return sortNodes([...folders]);
+  }
+
+  const orderMap = new Map(order.map((path, index) => [path, index]));
+  return [...folders].sort((a, b) => {
+    const aIndex = orderMap.has(a.path) ? orderMap.get(a.path)! : Number.MAX_SAFE_INTEGER;
+    const bIndex = orderMap.has(b.path) ? orderMap.get(b.path)! : Number.MAX_SAFE_INTEGER;
+    if (aIndex !== bIndex) {
+      return aIndex - bIndex;
+    }
+    return (a.title || a.name).localeCompare(b.title || b.name, 'fr');
+  });
+};
+
 const sortMediasWithOrder = <T extends MediaNodeBase & { path: string }>(medias: T[], order?: string[]) => {
   if (!order || order.length === 0) {
     return sortNodes([...medias]);
@@ -202,7 +218,7 @@ export class MediaLibrary {
     const folderKey = toPosix(relative);
     const folderMeta = folders[folderKey] || undefined;
 
-    const orderedFolders = sortNodes(folderChildren);
+    const orderedFolders = sortFoldersWithOrder(folderChildren, folderMeta?.folderOrder);
     const orderedMedias = sortMediasWithOrder(mediaChildren, folderMeta?.mediaOrder);
     const mediaPositions = await this.ensureMediaPositions(folderKey, folderMeta, orderedMedias);
     const children: Array<FolderNode | MediaLeaf> = [...orderedFolders, ...orderedMedias];

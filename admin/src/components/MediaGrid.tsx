@@ -1,6 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import ImageIcon from '@mui/icons-material/ImageRounded';
+import {
+  DragOverlay,
+  useDndContext,
+  useDndMonitor,
+  useDroppable
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  rectSortingStrategy,
+  useSortable
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { MediaNode } from '../api/types.js';
 
 interface Props {
@@ -8,54 +21,235 @@ interface Props {
   selectedPaths: string[];
   primarySelectedPath?: string;
   onSelectionChange: (paths: string[], primary?: string) => void;
-  onReorder: (nextOrder: string[]) => void | Promise<void>;
   onOpenMedia?: (media: MediaNode) => void;
+  onReorder?: (nextOrder: string[]) => void | Promise<void>;
 }
 
-const MEDIA_DRAG_TYPE = 'application/x-media-path';
 const THUMB_SIZE = 160;
+const TAIL_DROPPABLE_ID = 'media-tail';
 
-const isSameOrder = (a: string[], b: string[]) =>
-  a.length === b.length && a.every((value, index) => value === b[index]);
+const isSameOrder = (a: string[] | null | undefined, b: string[] | null | undefined) => {
+  if (!a || !b) return false;
+  if (a.length !== b.length) return false;
+  return a.every((value, index) => value === b[index]);
+};
 
 const buildMediaUrl = (input?: string) => {
   if (!input) return undefined;
   if (input.startsWith('/api/media')) return input;
-  const isAbsolute = /^(?:[a-z]+:)?\/\//i.test(input) || input.startsWith('data:') || input.startsWith('blob:');
+  const isAbsolute =
+    /^(?:[a-z]+:)?\/\//i.test(input) ||
+    input.startsWith('data:') ||
+    input.startsWith('blob:');
   if (isAbsolute) return input;
   const normalized = input.startsWith('/') ? input : `/${input}`;
   return `/api/media${normalized}`;
 };
 
-const isPromise = <T = unknown>(value: unknown): value is Promise<T> =>
-  typeof value === 'object' &&
-  value !== null &&
-  'then' in (value as Record<string, unknown>) &&
-  typeof (value as Promise<T>).then === 'function';
+type SortableData = {
+  type: 'media';
+  path: string;
+  media: MediaNode;
+};
+
+type TailDropData = {
+  type: 'media-tail';
+};
+
+type GridDropData = SortableData | TailDropData;
+
+const MultiDragOverlay: React.FC<{ count: number }> = ({ count }) => (
+  <Box
+    sx={{
+      position: 'relative',
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 1.5,
+      px: 2,
+      py: 1.25,
+      borderRadius: 2,
+      backgroundColor: 'rgba(15, 23, 42, 0.92)',
+      border: '1px solid rgba(61, 111, 217, 0.45)',
+      boxShadow: '0 18px 32px rgba(9, 14, 35, 0.45)',
+      color: '#fff',
+      fontSize: 13,
+      fontWeight: 600,
+      letterSpacing: 0.3
+    }}
+  >
+    <Box
+      component="span"
+      sx={{
+        width: 22,
+        height: 22,
+        borderRadius: 1.5,
+        backgroundColor: 'rgba(255,255,255,0.22)',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: 12
+      }}
+    >
+      {count}
+    </Box>
+    <Typography component="span" sx={{ fontSize: 13, fontWeight: 600 }}>
+      {count === 1 ? 'Déplacer 1 image' : `Déplacer ${count} images`}
+    </Typography>
+  </Box>
+);
+
+const SingleDragOverlay: React.FC<{ media: MediaNode }> = ({ media }) => {
+  const thumbs =
+    media.thumbnails && Object.keys(media.thumbnails).length > 0
+      ? media.thumbnails
+      : undefined;
+  const primary = thumbs ? thumbs.thumb || Object.values(thumbs)[0] : undefined;
+  const previewUrl = buildMediaUrl(primary?.defaultPath);
+
+  return (
+    <Box
+      sx={{
+        width: THUMB_SIZE,
+        height: THUMB_SIZE,
+        border: '1px solid rgba(120, 130, 140, 0.45)',
+        borderRadius: 1,
+        overflow: 'hidden',
+        backgroundColor: '#fff',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}
+    >
+      {previewUrl ? (
+        <img
+          src={previewUrl}
+          alt={media.title || media.name}
+          loading="lazy"
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      ) : (
+        <ImageIcon fontSize="large" color="disabled" />
+      )}
+    </Box>
+  );
+};
+
+const TailDropZone: React.FC<{ active: boolean }> = ({ active }) => {
+  const { setNodeRef, isOver } = useDroppable({
+    id: TAIL_DROPPABLE_ID,
+    data: { type: 'media-tail' } as TailDropData
+  });
+
+  const highlight = active || isOver;
+
+  return (
+    <Box
+      ref={setNodeRef}
+      sx={{
+        flexBasis: '100%',
+        minHeight: 32,
+        border: highlight ? '2px dashed #6f89a6' : '2px dashed transparent',
+        borderRadius: 1,
+        transition: 'border-color 120ms ease'
+      }}
+    />
+  );
+};
+
+interface SortableMediaTileProps {
+  media: MediaNode;
+  isSelected: boolean;
+  isDragTarget: boolean;
+  onClick: (event: React.MouseEvent<HTMLDivElement>, media: MediaNode) => void;
+  onPointerDown: (event: React.PointerEvent<HTMLDivElement>, media: MediaNode) => void;
+  onDoubleClick?: (event: React.MouseEvent<HTMLDivElement>, media: MediaNode) => void;
+}
+
+const SortableMediaTile: React.FC<SortableMediaTileProps> = ({
+  media,
+  isSelected,
+  isDragTarget,
+  onClick,
+  onPointerDown,
+  onDoubleClick
+}) => {
+  const {
+    setNodeRef,
+    attributes,
+    listeners,
+    transform,
+    transition,
+    isDragging
+  } = useSortable({
+    id: media.path,
+    data: { type: 'media', path: media.path, media } as SortableData
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    cursor: isDragging ? 'grabbing' : 'grab'
+  } as React.CSSProperties;
+
+  const thumbs =
+    media.thumbnails && Object.keys(media.thumbnails).length > 0
+      ? media.thumbnails
+      : undefined;
+  const primary = thumbs ? thumbs.thumb || Object.values(thumbs)[0] : undefined;
+  const previewUrl = buildMediaUrl(primary?.defaultPath);
+
+  return (
+    <Box
+      ref={setNodeRef}
+      data-role="thumbnail"
+      data-path={media.path}
+      sx={{
+        width: THUMB_SIZE,
+        height: THUMB_SIZE,
+        border: '1px solid rgba(120, 130, 140, 0.45)',
+        backgroundColor: '#fff',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'relative',
+        outline: isSelected ? '2px solid #3d6fd9' : 'none',
+        boxShadow: isDragTarget ? '0 0 0 2px rgba(111,137,166,0.6) inset' : 'none',
+        opacity: isDragging ? 0.6 : 1,
+        borderRadius: 1,
+        overflow: 'hidden'
+      }}
+      style={style}
+      onClick={(event) => onClick(event, media)}
+      onPointerDown={(event) => onPointerDown(event, media)}
+      onDoubleClick={(event) => onDoubleClick?.(event, media)}
+      {...attributes}
+      {...listeners}
+    >
+      {previewUrl ? (
+        <img
+          src={previewUrl}
+          alt={media.title || media.name}
+          loading="lazy"
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+        />
+      ) : (
+        <ImageIcon fontSize="large" color="disabled" />
+      )}
+    </Box>
+  );
+};
 
 export const MediaGrid: React.FC<Props> = ({
   medias,
   selectedPaths,
   primarySelectedPath,
   onSelectionChange,
-  onReorder,
-  onOpenMedia
+  onOpenMedia,
+  onReorder
 }) => {
-  const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [tailActive, setTailActive] = useState(false);
   const [previewOrder, setPreviewOrder] = useState<string[] | null>(null);
-  const committedOrderRef = useRef<string[]>([]);
-  const pendingOrderRef = useRef<string[] | null>(null);
-  const dropHandledRef = useRef(false);
-
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const marqueeOriginRef = useRef<{ x: number; y: number } | null>(null);
-  const marqueeBaseSelectionRef = useRef<string[]>([]);
-  const marqueeBasePrimaryRef = useRef<string | undefined>(undefined);
-  const containerRectRef = useRef<DOMRect | null>(null);
-  const hasDraggedRef = useRef(false);
-  const lastTapRef = useRef<{ time: number; path?: string }>({ time: 0, path: undefined });
   const [marqueeRect, setMarqueeRect] = useState<{
     left: number;
     top: number;
@@ -63,25 +257,32 @@ export const MediaGrid: React.FC<Props> = ({
     height: number;
   } | null>(null);
 
-  const selectionAnchorRef = useRef<string | null>(primarySelectedPath ?? null);
-  const dragPreviewRef = useRef<HTMLDivElement | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const marqueeOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const marqueeBaseSelectionRef = useRef<string[]>([]);
+  const marqueeBasePrimaryRef = useRef<string | undefined>(undefined);
+  const containerRectRef = useRef<DOMRect | null>(null);
+  const hasDraggedRef = useRef(false);
+  const selectionAnchorRef = useRef<string | null>(
+    primarySelectedPath ?? null
+  );
+
+  const baseOrder = useMemo(() => medias.map((m) => m.path), [medias]);
+
+  const mediaByPath = useMemo(() => {
+    const map = new Map<string, MediaNode>();
+    medias.forEach((media) => map.set(media.path, media));
+    return map;
+  }, [medias]);
 
   useEffect(() => {
-    const nextOrder = medias.map((media) => media.path);
-    committedOrderRef.current = nextOrder;
-
-    const pendingOrder = pendingOrderRef.current;
-    if (!pendingOrder) {
-      setPreviewOrder(null);
-    } else if (isSameOrder(nextOrder, pendingOrder)) {
-      pendingOrderRef.current = null;
-      setPreviewOrder(null);
-    }
-
-    setDraggingId(null);
+    setPreviewOrder((current) => {
+      if (!current) return null;
+      return isSameOrder(current, baseOrder) ? null : current;
+    });
     setDragOverId(null);
     setTailActive(false);
-  }, [medias]);
+  }, [baseOrder]);
 
   useEffect(() => {
     if (primarySelectedPath) {
@@ -92,30 +293,31 @@ export const MediaGrid: React.FC<Props> = ({
     }
   }, [primarySelectedPath, selectedPaths.length]);
 
-  const baseOrder = useMemo(() => medias.map((media) => media.path), [medias]);
-
   const orderedMedias = useMemo(() => {
-    if (!previewOrder) return medias;
-    const map = new Map(medias.map((media) => [media.path, media]));
+    const order = previewOrder ?? baseOrder;
     const arranged: MediaNode[] = [];
-    previewOrder.forEach((path) => {
-      const media = map.get(path);
-      if (media) arranged.push(media);
+    const remaining = new Set(order);
+
+    order.forEach((path) => {
+      const media = mediaByPath.get(path);
+      if (media) {
+        arranged.push(media);
+        remaining.delete(path);
+      }
     });
+
     medias.forEach((media) => {
-      if (!previewOrder.includes(media.path)) {
+      if (!remaining.has(media.path) && !order.includes(media.path)) {
         arranged.push(media);
       }
     });
-    return arranged;
-  }, [previewOrder, medias]);
 
-  const mediaPaths = useMemo(() => orderedMedias.map((media) => media.path), [orderedMedias]);
+    return arranged;
+  }, [previewOrder, baseOrder, mediaByPath, medias]);
+
   const orderMap = useMemo(() => {
     const map = new Map<string, number>();
-    orderedMedias.forEach((media, index) => {
-      map.set(media.path, index);
-    });
+    orderedMedias.forEach((media, index) => map.set(media.path, index));
     return map;
   }, [orderedMedias]);
 
@@ -148,7 +350,10 @@ export const MediaGrid: React.FC<Props> = ({
         }
       }
 
-      if (isSameOrder(ordered, selectedPaths) && nextPrimary === primarySelectedPath) {
+      if (
+        isSameOrder(ordered, selectedPaths) &&
+        nextPrimary === primarySelectedPath
+      ) {
         return;
       }
 
@@ -157,271 +362,277 @@ export const MediaGrid: React.FC<Props> = ({
     [sortSelection, selectedPaths, primarySelectedPath, onSelectionChange]
   );
 
-  const createMultiDragPreview = (count: number) => {
-    const preview = document.createElement('div');
-    preview.style.position = 'fixed';
-    preview.style.top = '0';
-    preview.style.left = '0';
-    preview.style.pointerEvents = 'none';
-    preview.style.padding = '11px 16px';
-    preview.style.borderRadius = '10px';
-    preview.style.background = 'rgba(15, 23, 42, 0.92)';
-    preview.style.border = '1px solid rgba(61, 111, 217, 0.45)';
-    preview.style.boxShadow = '0 18px 32px rgba(9, 14, 35, 0.45)';
-    preview.style.color = '#fff';
-    preview.style.display = 'flex';
-    preview.style.alignItems = 'center';
-    preview.style.gap = '10px';
-    preview.style.fontSize = '13px';
-    preview.style.fontWeight = '600';
-    preview.style.letterSpacing = '0.3px';
-    preview.style.zIndex = '9999';
-
-    const badge = document.createElement('span');
-    badge.style.display = 'inline-flex';
-    badge.style.alignItems = 'center';
-    badge.style.justifyContent = 'center';
-    badge.style.width = '22px';
-    badge.style.height = '22px';
-    badge.style.borderRadius = '7px';
-    badge.style.background = 'rgba(255,255,255,0.22)';
-    badge.style.fontSize = '12px';
-    badge.textContent = count.toString();
-
-    const label = document.createElement('span');
-    label.textContent = count === 1 ? 'Déplacer 1 image' : `Déplacer ${count} images`;
-
-    preview.append(badge, label);
-    document.body.appendChild(preview);
-    dragPreviewRef.current = preview;
-    return preview;
-  };
-
-  const cleanupDragPreview = () => {
-    if (dragPreviewRef.current && dragPreviewRef.current.parentNode) {
-      dragPreviewRef.current.parentNode.removeChild(dragPreviewRef.current);
-    }
-    dragPreviewRef.current = null;
-  };
-
-  useEffect(() => cleanupDragPreview, []);
-
-  const updatePreviewOrder = (nextOrder: string[]) => {
+  const updatePreviewOrder = useCallback((next: string[]) => {
     setPreviewOrder((current) => {
-      if (current) {
-        return isSameOrder(current, nextOrder) ? current : nextOrder;
-      }
-      return isSameOrder(baseOrder, nextOrder) ? current : nextOrder;
+      if (current && isSameOrder(current, next)) return current;
+      return [...next];
     });
-  };
+  }, []);
 
-  const previewReorderTo = (targetId: string) => {
-    if (!draggingId || draggingId === targetId) return;
-    const currentOrder = previewOrder ?? baseOrder;
-    const fromIndex = currentOrder.indexOf(draggingId);
-    const toIndex = currentOrder.indexOf(targetId);
-    if (fromIndex === -1 || toIndex === -1) return;
-    const nextOrder = [...currentOrder];
-    nextOrder.splice(fromIndex, 1);
-    nextOrder.splice(toIndex, 0, draggingId);
-    updatePreviewOrder(nextOrder);
-  };
+  const clearPreviewOrder = useCallback(() => {
+    setPreviewOrder(null);
+  }, []);
 
-  const previewMoveToEnd = () => {
-    if (!draggingId) return;
-    const currentOrder = previewOrder ?? baseOrder;
-    const fromIndex = currentOrder.indexOf(draggingId);
-    if (fromIndex === -1 || fromIndex === currentOrder.length - 1) return;
-    const nextOrder = [...currentOrder];
-    nextOrder.splice(fromIndex, 1);
-    nextOrder.push(draggingId);
-    updatePreviewOrder(nextOrder);
-  };
+  const previewReorderTo = useCallback(
+    (activeId: string, targetId: string) => {
+      const current = previewOrder ?? baseOrder;
+      const from = current.indexOf(activeId);
+      const to = current.indexOf(targetId);
+      if (from === -1 || to === -1 || from === to) return;
+      const next = arrayMove(current, from, to);
+      updatePreviewOrder(next);
+    },
+    [previewOrder, baseOrder, updatePreviewOrder]
+  );
 
-  const isMediaDrag = (event: React.DragEvent) =>
-    Array.from(event.dataTransfer?.types ?? []).includes(MEDIA_DRAG_TYPE);
+  const previewMoveToEnd = useCallback(
+    (activeId: string) => {
+      const current = previewOrder ?? baseOrder;
+      const from = current.indexOf(activeId);
+      if (from === -1 || from === current.length - 1) return;
+      const next = [...current];
+      next.splice(from, 1);
+      next.push(activeId);
+      updatePreviewOrder(next);
+    },
+    [previewOrder, baseOrder, updatePreviewOrder]
+  );
 
-  const commitOrder = (nextOrder: string[]) => {
-    if (isSameOrder(nextOrder, committedOrderRef.current)) {
-      console.log('[MediaGrid] drop commit skipped (order unchanged)', {
-        nextOrder
-      });
-      return;
-    }
-    const previousOrder = [...committedOrderRef.current];
-    const normalizedOrder = [...nextOrder];
-    console.log('[MediaGrid] drop commit', {
-      previousOrder,
-      nextOrder: normalizedOrder
-    });
-    pendingOrderRef.current = normalizedOrder;
-    setPreviewOrder(normalizedOrder);
-    committedOrderRef.current = normalizedOrder;
-    const result = onReorder(normalizedOrder);
-    if (isPromise(result)) {
-      result.catch(() => {
-        if (pendingOrderRef.current && isSameOrder(pendingOrderRef.current, normalizedOrder)) {
-          pendingOrderRef.current = null;
-          committedOrderRef.current = previousOrder;
-          setPreviewOrder(null);
-        }
-      });
-    }
-  };
-
-  const handleDragEnd = (event: React.DragEvent<HTMLDivElement>) => {
-    const dropEffect = event.dataTransfer.dropEffect;
-    if (dropEffect !== 'none' && !dropHandledRef.current) {
-      const finalOrder = previewOrder ?? committedOrderRef.current;
-      console.log('[MediaGrid] drag end fallback commit', {
-        dropEffect,
-        finalOrder
-      });
-      commitOrder(finalOrder);
-    }
-    if (dropEffect === 'none') {
-      setPreviewOrder(null);
-    }
-    dropHandledRef.current = false;
-    setDraggingId(null);
-    setDragOverId(null);
-    setTailActive(false);
-    cleanupDragPreview();
-  };
-
-  const handleTileClick = (event: React.MouseEvent<HTMLDivElement>, media: MediaNode) => {
-    event.preventDefault();
-    const shift = event.shiftKey;
-    const toggle = event.metaKey || event.ctrlKey;
-
-    if (shift) {
-      const anchor =
-        selectionAnchorRef.current ??
-        primarySelectedPath ??
-        selectedPaths[selectedPaths.length - 1] ??
-        media.path;
-      const anchorIndex = orderMap.get(anchor);
-      const targetIndex = orderMap.get(media.path);
-      if (anchorIndex === undefined || targetIndex === undefined) {
-        commitSelection([media.path], media.path);
+  useDndMonitor({
+    onDragStart: ({ active }) => {
+      const id = typeof active.id === 'string' ? active.id : String(active.id);
+      if (!baseOrder.includes(id)) return;
+      setDragOverId(null);
+      setTailActive(false);
+    },
+    onDragOver: ({ active, over }) => {
+      const id = typeof active.id === 'string' ? active.id : String(active.id);
+      if (!baseOrder.includes(id)) return;
+      if (!over) {
+        setDragOverId(null);
+        setTailActive(false);
         return;
       }
-      const start = Math.min(anchorIndex, targetIndex);
-      const end = Math.max(anchorIndex, targetIndex);
-      const range = orderedMedias.slice(start, end + 1).map((item) => item.path);
-      commitSelection(range, media.path);
-      return;
-    }
-
-    if (toggle) {
-      const current = new Set(selectedPaths);
-      if (current.has(media.path)) {
-        current.delete(media.path);
-      } else {
-        current.add(media.path);
+      const data = over.data?.current as GridDropData | undefined;
+      if (data?.type === 'media') {
+        const overId = typeof over.id === 'string' ? over.id : String(over.id);
+        if (overId === id) return;
+        setTailActive(false);
+        setDragOverId(overId);
+        previewReorderTo(id, overId);
+        return;
       }
-      const ordered = sortSelection(current);
-      const nextPrimary = current.has(media.path)
-        ? media.path
-        : primarySelectedPath === media.path
-        ? ordered[ordered.length - 1]
-        : primarySelectedPath;
-      selectionAnchorRef.current = media.path;
-      commitSelection(ordered, nextPrimary);
-      return;
+      if (data?.type === 'media-tail') {
+        setDragOverId(null);
+        setTailActive(true);
+        previewMoveToEnd(id);
+        return;
+      }
+      setDragOverId(null);
+      setTailActive(false);
+      clearPreviewOrder();
+    },
+    onDragEnd: ({ active, over }) => {
+      const id = typeof active.id === 'string' ? active.id : String(active.id);
+      setDragOverId(null);
+      setTailActive(false);
+
+      if (!over) {
+        clearPreviewOrder();
+        return;
+      }
+
+      const data = over.data?.current as GridDropData | undefined;
+      if (data?.type === 'media' || data?.type === 'media-tail') {
+        const finalOrder = previewOrder ?? baseOrder;
+        if (!isSameOrder(finalOrder, baseOrder)) {
+          const snapshot = [...finalOrder];
+          setPreviewOrder(snapshot);
+          onReorder?.(snapshot);
+        } else {
+          clearPreviewOrder();
+        }
+        return;
+      }
+
+      clearPreviewOrder();
+    },
+    onDragCancel: () => {
+      setDragOverId(null);
+      setTailActive(false);
+      clearPreviewOrder();
     }
+  });
 
-    selectionAnchorRef.current = media.path;
-    commitSelection([media.path], media.path);
-  };
+  const handleTilePointerDown = useCallback(
+    (_event: React.PointerEvent<HTMLDivElement>, media: MediaNode) => {
+      selectionAnchorRef.current = media.path;
+    },
+    []
+  );
 
-  const handleContainerMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return;
-    const target = event.target as HTMLElement;
-    if (target.closest('[data-role="thumbnail"]')) return;
+  const handleTileClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>, media: MediaNode) => {
+      event.preventDefault();
+      const shift = event.shiftKey;
+      const toggle = event.metaKey || event.ctrlKey;
 
-    const container = containerRef.current;
-    if (!container) return;
+      if (shift) {
+        const anchor =
+          selectionAnchorRef.current ??
+          primarySelectedPath ??
+          selectedPaths[selectedPaths.length - 1] ??
+          media.path;
+        const aIndex = orderMap.get(anchor);
+        const tIndex = orderMap.get(media.path);
+        if (aIndex === undefined || tIndex === undefined) {
+          commitSelection([media.path], media.path);
+          return;
+        }
+        const start = Math.min(aIndex, tIndex);
+        const end = Math.max(aIndex, tIndex);
+        const range = orderedMedias.slice(start, end + 1).map((item) => item.path);
+        commitSelection(range, media.path);
+        return;
+      }
 
-    event.preventDefault();
+      if (toggle) {
+        const current = new Set(selectedPaths);
+        if (current.has(media.path)) current.delete(media.path);
+        else current.add(media.path);
+        const ordered = sortSelection(current);
+        const nextPrimary = current.has(media.path)
+          ? media.path
+          : primarySelectedPath === media.path
+          ? ordered[ordered.length - 1]
+          : primarySelectedPath;
+        selectionAnchorRef.current = media.path;
+        commitSelection(ordered, nextPrimary);
+        return;
+      }
 
-    const additive = event.metaKey || event.ctrlKey;
-    marqueeOriginRef.current = { x: event.clientX, y: event.clientY };
-    containerRectRef.current = container.getBoundingClientRect();
-    marqueeBaseSelectionRef.current = additive ? [...selectedPaths] : [];
-    marqueeBasePrimaryRef.current = additive ? primarySelectedPath : undefined;
-    hasDraggedRef.current = false;
+      selectionAnchorRef.current = media.path;
+      commitSelection([media.path], media.path);
+    },
+    [
+      commitSelection,
+      orderedMedias,
+      orderMap,
+      primarySelectedPath,
+      selectedPaths,
+      sortSelection
+    ]
+  );
 
-    setMarqueeRect({
-      left: event.clientX - containerRectRef.current.left,
-      top: event.clientY - containerRectRef.current.top,
-      width: 0,
-      height: 0
-    });
+  const handleTileDoubleClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>, media: MediaNode) => {
+      event.preventDefault();
+      onOpenMedia?.(media);
+    },
+    [onOpenMedia]
+  );
 
-    const handlePointerMove = (moveEvent: PointerEvent) => {
-      if (!marqueeOriginRef.current || !containerRectRef.current) return;
-      hasDraggedRef.current = true;
+  const handleContainerMouseDown = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
+      const target = event.target as HTMLElement;
+      if (target.closest('[data-role="thumbnail"]')) return;
 
-      const { x: startX, y: startY } = marqueeOriginRef.current;
-      const currentX = moveEvent.clientX;
-      const currentY = moveEvent.clientY;
+      const container = containerRef.current;
+      if (!container) return;
 
-      const rectLeft = Math.min(startX, currentX);
-      const rectTop = Math.min(startY, currentY);
-      const rectRight = Math.max(startX, currentX);
-      const rectBottom = Math.max(startY, currentY);
+      event.preventDefault();
+      const additive = event.metaKey || event.ctrlKey;
+      marqueeOriginRef.current = { x: event.clientX, y: event.clientY };
+      containerRectRef.current = container.getBoundingClientRect();
+      marqueeBaseSelectionRef.current = additive ? [...selectedPaths] : [];
+      marqueeBasePrimaryRef.current = additive ? primarySelectedPath : undefined;
+      hasDraggedRef.current = false;
 
       setMarqueeRect({
-        left: rectLeft - containerRectRef.current.left,
-        top: rectTop - containerRectRef.current.top,
-        width: rectRight - rectLeft,
-        height: rectBottom - rectTop
+        left: event.clientX - containerRectRef.current.left,
+        top: event.clientY - containerRectRef.current.top,
+        width: 0,
+        height: 0
       });
 
-      const tiles = container.querySelectorAll<HTMLElement>('[data-role="thumbnail"]');
-      const next = new Set(additive ? marqueeBaseSelectionRef.current : []);
-      tiles.forEach((tile) => {
-        const bounds = tile.getBoundingClientRect();
-        const intersects =
-          bounds.right >= rectLeft &&
-          bounds.left <= rectRight &&
-          bounds.bottom >= rectTop &&
-          bounds.top <= rectBottom;
-        const path = tile.dataset.path;
-        if (!path) return;
-        if (intersects) {
-          next.add(path);
-        } else if (!additive) {
-          next.delete(path);
+      const handlePointerMove = (move: PointerEvent) => {
+        if (!marqueeOriginRef.current || !containerRectRef.current) return;
+        hasDraggedRef.current = true;
+        const { x, y } = marqueeOriginRef.current;
+        const rectLeft = Math.min(x, move.clientX);
+        const rectTop = Math.min(y, move.clientY);
+        const rectRight = Math.max(x, move.clientX);
+        const rectBottom = Math.max(y, move.clientY);
+        setMarqueeRect({
+          left: rectLeft - containerRectRef.current.left,
+          top: rectTop - containerRectRef.current.top,
+          width: rectRight - rectLeft,
+          height: rectBottom - rectTop
+        });
+        const tiles = container.querySelectorAll<HTMLElement>('[data-role="thumbnail"]');
+        const next = new Set(additive ? marqueeBaseSelectionRef.current : []);
+        tiles.forEach((tile) => {
+          const b = tile.getBoundingClientRect();
+          const intersects =
+            b.right >= rectLeft &&
+            b.left <= rectRight &&
+            b.bottom >= rectTop &&
+            b.top <= rectBottom;
+          const path = tile.dataset.path;
+          if (!path) return;
+          if (intersects) next.add(path);
+          else if (!additive) next.delete(path);
+        });
+        commitSelection(next);
+      };
+
+      const handlePointerUp = () => {
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('pointerup', handlePointerUp);
+        setMarqueeRect(null);
+        marqueeOriginRef.current = null;
+        containerRectRef.current = null;
+        if (!hasDraggedRef.current) {
+          commitSelection(
+            marqueeBaseSelectionRef.current,
+            marqueeBasePrimaryRef.current
+          );
         }
-      });
-      commitSelection(next);
-    };
+      };
 
-    const handlePointerUp = () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-      setMarqueeRect(null);
-      marqueeOriginRef.current = null;
-      containerRectRef.current = null;
-      if (!hasDraggedRef.current) {
-        commitSelection(marqueeBaseSelectionRef.current, marqueeBasePrimaryRef.current);
-      }
-    };
+      window.addEventListener('pointermove', handlePointerMove);
+      window.addEventListener('pointerup', handlePointerUp);
+    },
+    [commitSelection, primarySelectedPath, selectedPaths]
+  );
 
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp);
-  };
-
+  const { active } = useDndContext();
   if (medias.length === 0) {
     return (
       <Box sx={{ textAlign: 'center', py: 8, opacity: 0.7 }}>
-        <Typography variant="subtitle1">Ce dossier attend encore sa première image.</Typography>
-        <Typography variant="body2">Glissez-déposez vos créations n'importe où sur la page pour les importer ici.</Typography>
+        <Typography variant="subtitle1">
+          Ce dossier attend encore sa première image.
+        </Typography>
+        <Typography variant="body2">
+          Glissez-déposez vos créations n'importe où sur la page pour les
+          importer ici.
+        </Typography>
       </Box>
     );
   }
+
+  const activeId = active
+    ? typeof active.id === 'string'
+      ? active.id
+      : String(active.id)
+    : null;
+  const dragSelection = activeId && selectedSet.has(activeId)
+    ? selectedPaths
+    : activeId
+    ? [activeId]
+    : [];
+  const overlayMedia = activeId ? mediaByPath.get(activeId) : undefined;
 
   return (
     <Box
@@ -451,171 +662,29 @@ export const MediaGrid: React.FC<Props> = ({
         />
       )}
 
-      {orderedMedias.map((media) => {
-        const thumbnails = media.thumbnails && Object.keys(media.thumbnails).length > 0 ? media.thumbnails : undefined;
-        const primary = thumbnails ? thumbnails.thumb || Object.values(thumbnails)[0] : undefined;
-        const previewUrl = buildMediaUrl(primary?.defaultPath);
-        const isDragging = draggingId === media.path;
-        const isDragTarget = dragOverId === media.path;
-        const isSelected = selectedSet.has(media.path);
-
-        return (
-          <Box
+      <SortableContext items={orderedMedias.map((media) => media.path)} strategy={rectSortingStrategy}>
+        {orderedMedias.map((media) => (
+          <SortableMediaTile
             key={media.path}
-            data-role="thumbnail"
-            data-path={media.path}
-            onClick={(event) => handleTileClick(event, media)}
-            onDoubleClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              if (onOpenMedia) onOpenMedia(media);
-            }}
-            onTouchEnd={(event: React.TouchEvent<HTMLDivElement>) => {
-              if (event.touches.length > 0) return;
-              const now = Date.now();
-              if (lastTapRef.current.path === media.path && now - lastTapRef.current.time < 350) {
-                event.preventDefault();
-                event.stopPropagation();
-                if (onOpenMedia) onOpenMedia(media);
-                lastTapRef.current = { time: 0, path: undefined };
-              } else {
-                lastTapRef.current = { time: now, path: media.path };
-              }
-            }}
-            draggable
-            onDragStart={(event: React.DragEvent<HTMLDivElement>) => {
-              const dragPaths = selectedSet.has(media.path) ? [...selectedPaths] : [media.path];
-              if (!selectedSet.has(media.path)) {
-                selectionAnchorRef.current = media.path;
-                commitSelection(dragPaths, media.path);
-              }
-              setDraggingId(media.path);
-              setDragOverId(null);
-              setTailActive(false);
-              event.dataTransfer.effectAllowed = 'move';
-              event.dataTransfer.setData(MEDIA_DRAG_TYPE, JSON.stringify(dragPaths));
-              event.dataTransfer.setData('text/plain', dragPaths.join('\n'));
-              console.log('[MediaGrid] drag start', {
-                draggingId: media.path,
-                dragPaths,
-                initialOrder: previewOrder ?? baseOrder
-              });
-              if (event.dataTransfer.setDragImage) {
-                cleanupDragPreview();
-                if (dragPaths.length === 1) {
-                  event.dataTransfer.setDragImage(event.currentTarget, 5, 5);
-                } else {
-                  const preview = createMultiDragPreview(dragPaths.length);
-                  event.dataTransfer.setDragImage(preview, preview.offsetWidth / 2, preview.offsetHeight / 2);
-                }
-              }
-            }}
-            onDragOver={(event: React.DragEvent<HTMLDivElement>) => {
-              if (!isMediaDrag(event) || !draggingId || draggingId === media.path) return;
-              event.preventDefault();
-              event.stopPropagation();
-              event.dataTransfer.dropEffect = 'move';
-              setDragOverId(media.path);
-              setTailActive(false);
-              previewReorderTo(media.path);
-            }}
-            onDragEnter={(event: React.DragEvent<HTMLDivElement>) => {
-              if (!isMediaDrag(event) || !draggingId || draggingId === media.path) return;
-              event.preventDefault();
-              event.stopPropagation();
-              setDragOverId(media.path);
-              setTailActive(false);
-              previewReorderTo(media.path);
-            }}
-            onDragLeave={(event: React.DragEvent<HTMLDivElement>) => {
-              if (!isMediaDrag(event)) return;
-              const related = event.relatedTarget as Node | null;
-              if (!related || !event.currentTarget.contains(related)) {
-                setDragOverId((current) => (current === media.path ? null : current));
-              }
-            }}
-            onDrop={(event: React.DragEvent<HTMLDivElement>) => {
-              if (!isMediaDrag(event) || !draggingId) return;
-              event.preventDefault();
-              event.stopPropagation();
-              setDragOverId(null);
-              setTailActive(false);
-              const finalOrder = previewOrder ?? mediaPaths;
-              if (draggingId === media.path && isSameOrder(finalOrder, committedOrderRef.current)) {
-                dropHandledRef.current = true;
-                return;
-              }
-              dropHandledRef.current = true;
-              commitOrder(finalOrder);
-            }}
-            onDragEnd={handleDragEnd}
-            sx={{
-              width: THUMB_SIZE,
-              height: THUMB_SIZE,
-              border: '1px solid rgba(120, 130, 140, 0.45)',
-              borderRadius: 0,
-              overflow: 'hidden',
-              backgroundColor: '#fff',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              position: 'relative',
-              outline: isSelected ? '2px solid #3d6fd9' : 'none',
-              outlineOffset: isSelected ? '5px' : '0px',
-              boxShadow: isDragTarget ? '0 0 0 2px rgba(111,137,166,0.6) inset' : 'none',
-              opacity: isDragging ? 0.6 : 1,
-              transition: 'opacity 120ms ease, outline 120ms ease, box-shadow 120ms ease'
-            }}
-          >
-            {previewUrl ? (
-              <img
-                src={previewUrl}
-                alt={media.title || media.name}
-                loading="lazy"
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              />
-            ) : (
-              <ImageIcon fontSize="large" color="disabled" />
-            )}
-          </Box>
-        );
-      })}
-      <Box
-        onDragOver={(event: React.DragEvent<HTMLDivElement>) => {
-          if (!isMediaDrag(event) || !draggingId) return;
-          event.preventDefault();
-          event.stopPropagation();
-          event.dataTransfer.dropEffect = 'move';
-          setDragOverId(null);
-          setTailActive(true);
-          previewMoveToEnd();
-        }}
-        onDrop={(event: React.DragEvent<HTMLDivElement>) => {
-          if (!isMediaDrag(event) || !draggingId) return;
-          event.preventDefault();
-          event.stopPropagation();
-          setTailActive(false);
-          const finalOrder = previewOrder ?? mediaPaths;
-          dropHandledRef.current = true;
-          commitOrder(finalOrder);
-        }}
-        onDragLeave={(event: React.DragEvent<HTMLDivElement>) => {
-          if (!isMediaDrag(event)) return;
-          const related = event.relatedTarget as Node | null;
-          if (!related || !event.currentTarget.contains(related)) {
-            setTailActive(false);
-          }
-        }}
-        onDragEnd={handleDragEnd}
-        sx={{
-          flexBasis: '100%',
-          minHeight: 32,
-          borderRadius: 2,
-          border: tailActive ? '2px dashed #6f89a6' : '2px dashed transparent',
-          transition: 'border 120ms ease'
-        }}
-      />
+            media={media}
+            isSelected={selectedSet.has(media.path)}
+            isDragTarget={dragOverId === media.path}
+            onPointerDown={handleTilePointerDown}
+            onClick={handleTileClick}
+            onDoubleClick={handleTileDoubleClick}
+          />
+        ))}
+      </SortableContext>
+
+      <TailDropZone active={tailActive} />
+
+      <DragOverlay>
+        {dragSelection.length > 1 ? (
+          <MultiDragOverlay count={dragSelection.length} />
+        ) : overlayMedia ? (
+          <SingleDragOverlay media={overlayMedia} />
+        ) : null}
+      </DragOverlay>
     </Box>
   );
 };
