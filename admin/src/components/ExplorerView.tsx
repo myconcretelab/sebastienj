@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
   Button,
@@ -33,6 +33,62 @@ const ROW_VERTICAL_PADDING = 0.2; // vertical padding applied to each explorer r
 const ROW_CONTENT_VERTICAL_PADDING = ROW_VERTICAL_PADDING * 0.5;
 
 const LeafPlaceholder = () => <Box component="span" sx={{ width: 16, height: 16 }} />;
+
+interface FolderReorderSpacerProps {
+  parentPath: string;
+  beforePath: string | null;
+  targetDepth: number;
+}
+
+const FolderReorderSpacer: React.FC<FolderReorderSpacerProps> = ({ parentPath, beforePath, targetDepth }) => {
+  const theme = useTheme();
+  const { active } = useDndContext();
+  const activeData = active?.data?.current as { type?: string; path?: string; parent?: string } | undefined;
+  const isFolderDrag = activeData?.type === 'folder-node';
+  const activePath = activeData?.path;
+  const activeParent = activeData?.parent;
+
+  if (!isFolderDrag || !activePath || activeParent === undefined) {
+    return null;
+  }
+
+  if (activeParent !== parentPath) {
+    return null;
+  }
+
+  if (beforePath !== null && beforePath === activePath) {
+    return null;
+  }
+
+  const spacerId = `folder-reorder:${parentPath || 'root'}:${beforePath ?? 'end'}`;
+  const { setNodeRef, isOver } = useDroppable({
+    id: spacerId,
+    data: { type: 'folder-reorder', parent: parentPath, before: beforePath }
+  });
+
+  const indent = LABEL_PADDING_LEFT + targetDepth * LEVEL_INDENT_WIDTH;
+  const accent = theme.palette.primary?.light || 'rgba(61,111,217,0.65)';
+
+  return (
+    <Box
+      ref={setNodeRef}
+      sx={{
+        height: isOver ? 24 : 14,
+        mx: 1,
+        my: 0.75,
+        borderRadius: 1,
+        border: `1px dashed ${accent}`,
+        borderColor: isOver ? accent : 'rgba(111,137,166,0.32)',
+        bgcolor: isOver ? 'rgba(61,111,217,0.2)' : 'transparent',
+        opacity: isOver ? 0.85 : 0.6,
+        transition: 'all 140ms ease',
+        pointerEvents: 'auto',
+        ml: `${indent}px`,
+        mr: 1.5
+      }}
+    />
+  );
+};
 
 interface Props {
   tree: FolderNode;
@@ -232,10 +288,12 @@ export const ExplorerView: React.FC<Props> = ({
     const mediaCount = node.children.filter((child) => child.type === 'media').length;
 
     const { active } = useDndContext();
-    const activeType = (active?.data?.current as { type?: string } | undefined)?.type;
+    const activeData = active?.data?.current as { type?: string; path?: string; parent?: string } | undefined;
+    const activeType = activeData?.type;
     const isMediaDrag = activeType === 'media';
+    const isFolderDrag = activeType === 'folder-node';
 
-    const { setNodeRef: setMediaDropRef, isOver: isMediaDropOver } = useDroppable({
+    const { setNodeRef: setDropTargetRef, isOver: isDropTargetOver } = useDroppable({
       id: `media-target:${nodeId}`,
       data: { type: 'folder', path: folderPath }
     });
@@ -256,9 +314,9 @@ export const ExplorerView: React.FC<Props> = ({
     const combinedRef = useCallback(
       (element: HTMLElement | null) => {
         setSortableRef(element);
-        setMediaDropRef(element);
+        setDropTargetRef(element);
       },
-      [setSortableRef, setMediaDropRef]
+      [setSortableRef, setDropTargetRef]
     );
 
     const sortableStyle = isRoot
@@ -320,10 +378,17 @@ export const ExplorerView: React.FC<Props> = ({
               borderRadius: 1,
               transition: 'background-color 120ms ease, border 120ms ease, opacity 120ms ease',
               border:
-                (isMediaDropOver && isMediaDrag) || isDragging
+                isDragging ||
+                (isMediaDrag && isDropTargetOver) ||
+                (isFolderDrag && isDropTargetOver && activeData?.path !== folderPath)
                   ? '1px solid rgba(61, 111, 217, 0.55)'
                   : '1px solid transparent',
-              bgcolor: isMediaDropOver && isMediaDrag ? 'rgba(61,111,217,0.12)' : 'transparent',
+              bgcolor:
+                isMediaDrag && isDropTargetOver
+                  ? 'rgba(61,111,217,0.12)'
+                  : isFolderDrag && isDropTargetOver && activeData?.path !== folderPath
+                  ? 'rgba(61,111,217,0.1)'
+                  : 'transparent',
               opacity: isDragging ? 0.65 : 1
             }}
             style={sortableStyle}
@@ -381,14 +446,16 @@ export const ExplorerView: React.FC<Props> = ({
             items={childFolders.map((child) => child.path || `${folderPath}/${child.name}`)}
             strategy={verticalListSortingStrategy}
           >
-            {childFolders.map((child) => (
-              <FolderTreeItem
-                key={child.path || child.name}
-                node={child}
-                depth={depth + 1}
-                parentPath={folderPath}
-              />
-            ))}
+            {childFolders.map((child) => {
+              const childPath = child.path || `${folderPath}/${child.name}`;
+              return (
+                <Fragment key={childPath}>
+                  <FolderReorderSpacer parentPath={folderPath} beforePath={childPath} targetDepth={depth + 1} />
+                  <FolderTreeItem node={child} depth={depth + 1} parentPath={folderPath} />
+                </Fragment>
+              );
+            })}
+            <FolderReorderSpacer parentPath={folderPath} beforePath={null} targetDepth={depth + 1} />
           </SortableContext>
         )}
       </TreeItem>
@@ -428,55 +495,106 @@ export const ExplorerView: React.FC<Props> = ({
 
       const parentPath = activeData.parent;
 
-      if (!over) {
+      const clearPreview = () => {
         setPendingOrders((prev) => {
           if (!prev[parentPath]) return prev;
           const next = { ...prev };
           delete next[parentPath];
           return next;
         });
+      };
+
+      if (!over) {
+        clearPreview();
         return;
       }
 
       const overData = over.data?.current as
-        | { type?: string; path?: string; parent?: string }
+        | { type?: string; path?: string; parent?: string; before?: string | null }
         | undefined;
-      if (overData?.type !== 'folder-node' || !overData.path || overData.parent !== parentPath) {
-        setPendingOrders((prev) => {
-          if (!prev[parentPath]) return prev;
-          const next = { ...prev };
-          delete next[parentPath];
-          return next;
-        });
-        return;
-      }
 
       const siblings = folderChildrenMap.get(parentPath) ?? [];
-      if (siblings.length === 0) return;
-
       const currentOrder = getOrderedPaths(parentPath, siblings);
-      const fromIndex = currentOrder.indexOf(activeData.path);
-      const toIndex = currentOrder.indexOf(overData.path);
-      if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) {
+      const baseOrder = siblings.map((child) => child.path || '');
+
+      if (overData?.type === 'folder-reorder') {
+        if (overData.parent !== parentPath) {
+          clearPreview();
+          return;
+        }
+
+        if (currentOrder.length === 0) {
+          clearPreview();
+          return;
+        }
+
+        const filtered = currentOrder.filter((entry) => entry !== activeData.path);
+        if (filtered.length === currentOrder.length) {
+          clearPreview();
+          return;
+        }
+
+        let insertIndex = filtered.length;
+        if (overData.before !== undefined && overData.before !== null) {
+          const targetIndex = filtered.indexOf(overData.before);
+          if (targetIndex === -1) {
+            clearPreview();
+            return;
+          }
+          insertIndex = targetIndex;
+        }
+
+        const nextOrder = [...filtered];
+        nextOrder.splice(insertIndex, 0, activeData.path);
+
+        setPendingOrders((prev) => {
+          const copy = { ...prev };
+          if (isSameOrder(nextOrder, baseOrder)) {
+            delete copy[parentPath];
+            return copy;
+          }
+          copy[parentPath] = nextOrder;
+          return copy;
+        });
+
+        if (!isSameOrder(nextOrder, baseOrder)) {
+          onReorderFolders?.(parentPath, nextOrder);
+        }
         return;
       }
 
-      const nextOrder = arrayMove(currentOrder, fromIndex, toIndex);
-      const baseOrder = siblings.map((child) => child.path || '');
-
-      setPendingOrders((prev) => {
-        const copy = { ...prev };
-        if (isSameOrder(nextOrder, baseOrder)) {
-          delete copy[parentPath];
-          return copy;
+      if (overData?.type === 'folder-node' && overData.path && overData.parent === parentPath) {
+        if (currentOrder.length === 0) {
+          clearPreview();
+          return;
         }
-        copy[parentPath] = nextOrder;
-        return copy;
-      });
 
-      if (!isSameOrder(nextOrder, baseOrder)) {
-        onReorderFolders?.(parentPath, nextOrder);
+        const fromIndex = currentOrder.indexOf(activeData.path);
+        const toIndex = currentOrder.indexOf(overData.path);
+        if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) {
+          clearPreview();
+          return;
+        }
+
+        const nextOrder = arrayMove(currentOrder, fromIndex, toIndex);
+
+        setPendingOrders((prev) => {
+          const copy = { ...prev };
+          if (isSameOrder(nextOrder, baseOrder)) {
+            delete copy[parentPath];
+            return copy;
+          }
+          copy[parentPath] = nextOrder;
+          return copy;
+        });
+
+        if (!isSameOrder(nextOrder, baseOrder)) {
+          onReorderFolders?.(parentPath, nextOrder);
+        }
+        return;
       }
+
+      clearPreview();
     },
     onDragCancel: ({ active }) => {
       const activeData = active.data?.current as
