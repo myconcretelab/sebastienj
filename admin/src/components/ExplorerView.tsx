@@ -23,7 +23,17 @@ import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolderRounded';
 import EditIcon from '@mui/icons-material/EditRounded';
 import { FolderNode } from '../api/types.js';
 import { motion } from 'framer-motion';
-import { useDndContext, useDndMonitor, useDroppable } from '@dnd-kit/core';
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  TouchSensor,
+  useDndContext,
+  useDndMonitor,
+  useDroppable,
+  useSensor,
+  useSensors
+} from '@dnd-kit/core';
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 const LABEL_PADDING_LEFT = 4; // base left padding for folder label rows
@@ -33,6 +43,41 @@ const ROW_VERTICAL_PADDING = 0.2; // vertical padding applied to each explorer r
 const ROW_CONTENT_VERTICAL_PADDING = ROW_VERTICAL_PADDING * 0.5;
 
 const LeafPlaceholder = () => <Box component="span" sx={{ width: 16, height: 16 }} />;
+
+const TreePlaceholder: React.FC<{ depth: number }> = ({ depth }) => {
+  const paddingLeft = LABEL_PADDING_LEFT + depth * LEVEL_INDENT_WIDTH;
+  return (
+    <Box
+      component="li"
+      role="presentation"
+      sx={{
+        listStyle: 'none',
+        py: ROW_VERTICAL_PADDING,
+        px: 0,
+        display: 'flex'
+      }}
+    >
+      <Box
+        sx={{
+          ml: `${paddingLeft}px`,
+          mr: 1,
+          height: 28,
+          flex: 1,
+          borderRadius: 1,
+          border: '1px dashed rgba(99,115,129,0.6)',
+          bgcolor: 'rgba(145,158,171,0.12)'
+        }}
+      />
+    </Box>
+  );
+};
+
+type FolderDragData = {
+  type: 'folder-node';
+  path: string;
+  parent: string;
+  depth: number;
+};
 
 interface Props {
   tree: FolderNode;
@@ -114,9 +159,26 @@ export const ExplorerView: React.FC<Props> = ({
   });
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [pendingOrders, setPendingOrders] = useState<Record<string, string[]>>({});
+  const [activePath, setActivePath] = useState<string | null>(null);
+  const [placeholder, setPlaceholder] = useState<{
+    parentPath: string;
+    index: number;
+    depth: number;
+  } | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 }
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 120, tolerance: 8 }
+    })
+  );
 
   useEffect(() => {
     setPendingOrders({});
+    setPlaceholder(null);
+    setActivePath(null);
   }, [tree]);
 
   const folderChildrenMap = useMemo(() => {
@@ -126,6 +188,20 @@ export const ExplorerView: React.FC<Props> = ({
       const children = node.children.filter((child): child is FolderNode => child.type === 'folder');
       map.set(key, children);
       children.forEach(visit);
+    };
+    visit(tree);
+    return map;
+  }, [tree]);
+
+  const folderNodeMap = useMemo(() => {
+    const map = new Map<string, FolderNode>();
+    const visit = (node: FolderNode) => {
+      map.set(node.path || '', node);
+      node.children.forEach((child) => {
+        if (child.type === 'folder') {
+          visit(child);
+        }
+      });
     };
     visit(tree);
     return map;
@@ -249,7 +325,7 @@ export const ExplorerView: React.FC<Props> = ({
       isDragging
     } = useSortable({
       id: nodeId,
-      data: { type: 'folder-node', path: folderPath, parent: parentPath },
+      data: { type: 'folder-node', path: folderPath, parent: parentPath, depth },
       disabled: isRoot
     });
 
@@ -324,7 +400,8 @@ export const ExplorerView: React.FC<Props> = ({
                   ? '1px solid rgba(61, 111, 217, 0.55)'
                   : '1px solid transparent',
               bgcolor: isMediaDropOver && isMediaDrag ? 'rgba(61,111,217,0.12)' : 'transparent',
-              opacity: isDragging ? 0.65 : 1
+              opacity: isDragging ? 0 : 1,
+              visibility: isDragging ? 'hidden' : 'visible'
             }}
             style={sortableStyle}
             onDoubleClick={(event) => {
@@ -376,19 +453,40 @@ export const ExplorerView: React.FC<Props> = ({
           </Stack>
         }
       >
-        {childFolders.length > 0 && (
+        {(childFolders.length > 0 || (placeholder && placeholder.parentPath === folderPath)) && (
           <SortableContext
             items={childFolders.map((child) => child.path || `${folderPath}/${child.name}`)}
             strategy={verticalListSortingStrategy}
           >
-            {childFolders.map((child) => (
-              <FolderTreeItem
-                key={child.path || child.name}
-                node={child}
-                depth={depth + 1}
-                parentPath={folderPath}
-              />
-            ))}
+            {(() => {
+              const placeholderDetails =
+                placeholder && placeholder.parentPath === folderPath ? placeholder : null;
+              const elements: React.ReactNode[] = [];
+              childFolders.forEach((child, index) => {
+                if (placeholderDetails && placeholderDetails.index === index) {
+                  elements.push(
+                    <TreePlaceholder key={`placeholder-${folderPath}-${index}`} depth={placeholderDetails.depth} />
+                  );
+                }
+                elements.push(
+                  <FolderTreeItem
+                    key={child.path || child.name}
+                    node={child}
+                    depth={depth + 1}
+                    parentPath={folderPath}
+                  />
+                );
+              });
+              if (placeholderDetails && placeholderDetails.index === childFolders.length) {
+                elements.push(
+                  <TreePlaceholder
+                    key={`placeholder-${folderPath}-${childFolders.length}`}
+                    depth={placeholderDetails.depth}
+                  />
+                );
+              }
+              return elements;
+            })()}
           </SortableContext>
         )}
       </TreeItem>
@@ -418,10 +516,77 @@ export const ExplorerView: React.FC<Props> = ({
   }, [tree]);
 
   useDndMonitor({
+    onDragStart: ({ active }) => {
+      const activeData = active.data?.current as FolderDragData | undefined;
+      if (activeData?.type !== 'folder-node') {
+        setPlaceholder(null);
+        setActivePath(null);
+        return;
+      }
+
+      setActivePath(activeData.path);
+
+      const parentPath = activeData.parent ?? '';
+      const siblings = folderChildrenMap.get(parentPath) ?? [];
+      const ordered = getOrderedPaths(parentPath, siblings);
+      const currentIndex = ordered.indexOf(activeData.path);
+      const filteredLength = ordered.filter((id) => id !== activeData.path).length;
+      const initialIndex = currentIndex === -1 ? filteredLength : Math.min(Math.max(currentIndex, 0), filteredLength);
+
+      setPlaceholder({ parentPath, index: initialIndex, depth: activeData.depth });
+    },
+    onDragOver: ({ active, over }) => {
+      const activeData = active.data?.current as FolderDragData | undefined;
+      if (activeData?.type !== 'folder-node') {
+        setPlaceholder(null);
+        return;
+      }
+
+      if (!over) {
+        return;
+      }
+
+      if (over.id === active.id) {
+        return;
+      }
+
+      const overData = over.data?.current as FolderDragData | undefined;
+      if (overData?.type !== 'folder-node') {
+        setPlaceholder(null);
+        return;
+      }
+
+      if (overData.parent !== activeData.parent) {
+        setPlaceholder(null);
+        return;
+      }
+
+      const parentPath = activeData.parent;
+      const siblings = folderChildrenMap.get(parentPath) ?? [];
+      if (siblings.length === 0) {
+        setPlaceholder({ parentPath, index: 0, depth: activeData.depth });
+        return;
+      }
+
+      const ordered = getOrderedPaths(parentPath, siblings);
+      const withoutActive = ordered.filter((id) => id !== activeData.path);
+      const overIndex = withoutActive.indexOf(overData.path);
+
+      const activeRect = active.rect.current;
+      const overRect = over.rect;
+      const translatedTop = activeRect.translated?.top ?? activeRect.initial.top;
+      const isBelowOverItem = translatedTop > overRect.top + overRect.height / 2;
+
+      let nextIndex = (overIndex === -1 ? withoutActive.length : overIndex) + (isBelowOverItem ? 1 : 0);
+      nextIndex = Math.max(0, Math.min(withoutActive.length, nextIndex));
+
+      setPlaceholder({ parentPath, index: nextIndex, depth: overData.depth });
+    },
     onDragEnd: ({ active, over }) => {
-      const activeData = active.data?.current as
-        | { type?: string; path?: string; parent?: string }
-        | undefined;
+      setActivePath(null);
+      setPlaceholder(null);
+
+      const activeData = active.data?.current as FolderDragData | undefined;
       if (activeData?.type !== 'folder-node' || !activeData.path || activeData.parent === undefined) {
         return;
       }
@@ -438,9 +603,7 @@ export const ExplorerView: React.FC<Props> = ({
         return;
       }
 
-      const overData = over.data?.current as
-        | { type?: string; path?: string; parent?: string }
-        | undefined;
+      const overData = over.data?.current as FolderDragData | undefined;
       if (overData?.type !== 'folder-node' || !overData.path || overData.parent !== parentPath) {
         setPendingOrders((prev) => {
           if (!prev[parentPath]) return prev;
@@ -479,9 +642,10 @@ export const ExplorerView: React.FC<Props> = ({
       }
     },
     onDragCancel: ({ active }) => {
-      const activeData = active.data?.current as
-        | { type?: string; parent?: string }
-        | undefined;
+      setActivePath(null);
+      setPlaceholder(null);
+
+      const activeData = active.data?.current as FolderDragData | undefined;
       if (activeData?.type !== 'folder-node' || activeData.parent === undefined) {
         return;
       }
@@ -497,97 +661,125 @@ export const ExplorerView: React.FC<Props> = ({
 
   const hasSelection = selectedPath !== undefined && selectedPath !== null;
   const targetLabel = hasSelection && selectedPath ? selectedPath : 'la racine';
+  const activeNode = activePath ? folderNodeMap.get(activePath) : undefined;
 
   return (
-    <Stack spacing={2} sx={{ height: '100%' }}>
-      <Stack spacing={1.5} alignItems="flex-start">
-        <Typography variant="subtitle2" color="text.secondary" sx={{ letterSpacing: 1, textTransform: 'uppercase' }}>
-          Arborescence ({folderCount})
-        </Typography>
-        <Stack direction="row" spacing={1}>
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={<EditIcon fontSize="inherit" />}
-            onClick={onEditFolder}
-            disabled={!hasSelection}
-            sx={{ px: 1.25, py: 0.25, letterSpacing: 0.5, fontSize: '0.7rem', gap: 0.5, minHeight: 28 }}
-          >
-            Edition
-          </Button>
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<CreateNewFolderIcon fontSize="inherit" />}
-            onClick={() => setCreateDialogOpen(true)}
-            sx={{ px: 1.25, py: 0.25, letterSpacing: 0.5, fontSize: '0.7rem', gap: 0.5, minHeight: 28 }}
-          >
-            Nouveau dossier
-          </Button>
-        </Stack>
-      </Stack>
-      <SimpleTreeView
-        aria-label="explorateur"
-        slots={{ collapseIcon: CollapseIcon, expandIcon: ExpandIcon, endIcon: LeafPlaceholder }}
-        expandedItems={expanded}
-        onExpandedItemsChange={(_event, itemIds) => {
-          const normalized = Array.isArray(itemIds) ? itemIds.map((id) => (typeof id === 'string' ? id : String(id))) : [];
-          setExpanded(Array.from(new Set([rootId, ...normalized])));
-        }}
-        selectedItems={selectedPath || rootId}
-        onSelectedItemsChange={(_event, itemId) => {
-          if (typeof itemId === 'string') {
-            onSelect(itemId === rootId ? '' : itemId);
-          }
-        }}
-        sx={{ flex: 1, overflowY: 'auto', pr: 1 }}
-      >
-        <SortableContext items={[tree.path || rootId]} strategy={verticalListSortingStrategy}>
-          <FolderTreeItem node={tree} depth={0} parentPath="" />
-        </SortableContext>
-      </SimpleTreeView>
-      <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle>Nouveau dossier</DialogTitle>
-        <DialogContent sx={{ pt: 2 }}>
-          <Stack
-            spacing={2}
-            component={motion.div}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <AutoAwesomeMotionIcon fontSize="small" />
-              Créer dans {targetLabel}
-            </Typography>
-            <TextField
-              autoFocus
-              label="Nom du dossier"
-              value={newFolderName}
-              onChange={(event) => setNewFolderName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  handleCreate();
-                }
-              }}
-              fullWidth
-            />
+    <DndContext sensors={sensors}>
+      <Stack spacing={2} sx={{ height: '100%' }}>
+        <Stack spacing={1.5} alignItems="flex-start">
+          <Typography variant="subtitle2" color="text.secondary" sx={{ letterSpacing: 1, textTransform: 'uppercase' }}>
+            Arborescence ({folderCount})
+          </Typography>
+          <Stack direction="row" spacing={1}>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<EditIcon fontSize="inherit" />}
+              onClick={onEditFolder}
+              disabled={!hasSelection}
+              sx={{ px: 1.25, py: 0.25, letterSpacing: 0.5, fontSize: '0.7rem', gap: 0.5, minHeight: 28 }}
+            >
+              Edition
+            </Button>
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<CreateNewFolderIcon fontSize="inherit" />}
+              onClick={() => setCreateDialogOpen(true)}
+              sx={{ px: 1.25, py: 0.25, letterSpacing: 0.5, fontSize: '0.7rem', gap: 0.5, minHeight: 28 }}
+            >
+              Nouveau dossier
+            </Button>
           </Stack>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button
-            onClick={() => {
-              setCreateDialogOpen(false);
-              setNewFolderName('');
+        </Stack>
+        <SimpleTreeView
+          aria-label="explorateur"
+          slots={{ collapseIcon: CollapseIcon, expandIcon: ExpandIcon, endIcon: LeafPlaceholder }}
+          expandedItems={expanded}
+          onExpandedItemsChange={(_event, itemIds) => {
+            const normalized = Array.isArray(itemIds)
+              ? itemIds.map((id) => (typeof id === 'string' ? id : String(id)))
+              : [];
+            setExpanded(Array.from(new Set([rootId, ...normalized])));
+          }}
+          selectedItems={selectedPath || rootId}
+          onSelectedItemsChange={(_event, itemId) => {
+            if (typeof itemId === 'string') {
+              onSelect(itemId === rootId ? '' : itemId);
+            }
+          }}
+          sx={{ flex: 1, overflowY: 'auto', pr: 1 }}
+        >
+          <SortableContext items={[tree.path || rootId]} strategy={verticalListSortingStrategy}>
+            <FolderTreeItem node={tree} depth={0} parentPath="" />
+          </SortableContext>
+        </SimpleTreeView>
+        <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} fullWidth maxWidth="xs">
+          <DialogTitle>Nouveau dossier</DialogTitle>
+          <DialogContent sx={{ pt: 2 }}>
+            <Stack
+              spacing={2}
+              component={motion.div}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+            >
+              <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <AutoAwesomeMotionIcon fontSize="small" />
+                Créer dans {targetLabel}
+              </Typography>
+              <TextField
+                autoFocus
+                label="Nom du dossier"
+                value={newFolderName}
+                onChange={(event) => setNewFolderName(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    handleCreate();
+                  }
+                }}
+                fullWidth
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 2 }}>
+            <Button
+              onClick={() => {
+                setCreateDialogOpen(false);
+                setNewFolderName('');
+              }}
+            >
+              Annuler
+            </Button>
+            <Button variant="contained" onClick={handleCreate} disabled={!newFolderName.trim()}>
+              Créer
+            </Button>
+          </DialogActions>
+        </Dialog>
+      </Stack>
+      <DragOverlay>
+        {activeNode ? (
+          <Box
+            sx={{
+              px: 1.5,
+              py: 0.75,
+              borderRadius: 1,
+              boxShadow: theme.shadows[4],
+              bgcolor: 'background.paper',
+              border: '1px solid rgba(61,111,217,0.25)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.25,
+              minWidth: 180
             }}
           >
-            Annuler
-          </Button>
-          <Button variant="contained" onClick={handleCreate} disabled={!newFolderName.trim()}>
-            Créer
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Stack>
+            {iconForFolder(activeNode)}
+            <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
+              {activeNode.title || activeNode.name}
+            </Typography>
+          </Box>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
   );
 };
