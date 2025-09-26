@@ -10,8 +10,6 @@ import {
   TextField,
   Typography
 } from '@mui/material';
-import { SimpleTreeView } from '@mui/x-tree-view/SimpleTreeView';
-import { TreeItem } from '@mui/x-tree-view/TreeItem';
 import BrushIcon from '@mui/icons-material/BrushRounded';
 import PhotoIcon from '@mui/icons-material/PhotoCameraRounded';
 import CollectionsIcon from '@mui/icons-material/CollectionsRounded';
@@ -23,16 +21,29 @@ import CreateNewFolderIcon from '@mui/icons-material/CreateNewFolderRounded';
 import EditIcon from '@mui/icons-material/EditRounded';
 import { FolderNode } from '../api/types.js';
 import { motion } from 'framer-motion';
-import { useDndContext, useDndMonitor, useDroppable } from '@dnd-kit/core';
-import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import { useDndContext, useDroppable } from '@dnd-kit/core';
+import { DndProvider } from 'react-dnd';
+import {
+  Tree,
+  type NodeModel,
+  type RenderParams,
+  type DropOptions,
+  getBackendOptions,
+  MultiBackend,
+  type TreeMethods
+} from '@minoru/react-dnd-treeview';
+
 const LABEL_PADDING_LEFT = 4; // base left padding for folder label rows
 const LEVEL_INDENT_WIDTH = 15; // additional padding applied per depth level
 const TOGGLE_ICON_GAP = 0; // horizontal gap between the +/- toggle and folder labels (theme spacing units)
 const ROW_VERTICAL_PADDING = 0.2; // vertical padding applied to each explorer row (theme spacing units)
-const ROW_CONTENT_VERTICAL_PADDING = ROW_VERTICAL_PADDING * 0.5;
+const VIRTUAL_ROOT_ID = '__explorer-root__';
 
 const LeafPlaceholder = () => <Box component="span" sx={{ width: 16, height: 16 }} />;
+
+type ExplorerNode = NodeModel<FolderNode>;
+
+type FolderPathMap = Map<ExplorerNode['id'], string>;
 
 interface Props {
   tree: FolderNode;
@@ -54,6 +65,8 @@ export const ExplorerView: React.FC<Props> = ({
   const theme = useTheme();
   const accentColor = theme.palette.primary?.light || '#6f89a6';
   const lastTouchRef = useRef<{ time: number; path?: string }>({ time: 0, path: undefined });
+  const treeRef = useRef<TreeMethods>(null);
+  const backendOptions = useMemo(() => getBackendOptions(), []);
 
   const iconForFolder = (node: FolderNode) => {
     const iconProps = { sx: { fontSize: 18, color: accentColor } };
@@ -163,13 +176,6 @@ export const ExplorerView: React.FC<Props> = ({
   }, []);
 
   useEffect(() => {
-    setExpanded((prev) => {
-      if (prev.includes(rootId)) return prev;
-      return [...prev, rootId];
-    });
-  }, [rootId]);
-
-  useEffect(() => {
     try {
       window.localStorage.setItem('explorer-expanded', JSON.stringify(expanded));
     } catch (error) {
@@ -177,9 +183,36 @@ export const ExplorerView: React.FC<Props> = ({
     }
   }, [expanded]);
 
+  const updateExpanded = useCallback(
+    (ids: (string | number)[]) => {
+      const normalized = Array.from(new Set([rootId, ...ids.map((id) => id.toString())]));
+      setExpanded(normalized);
+    },
+    [rootId]
+  );
+
   useEffect(() => {
-    if (!selectedPath) return;
-    const ancestorIds = selectedPath
+    if (!expanded.includes(rootId)) {
+      treeRef.current?.open(rootId, (ids) => updateExpanded(ids));
+    }
+  }, [expanded, rootId, updateExpanded]);
+
+  const pathToNodeId = useCallback(
+    (path: string) => {
+      return path ? path : rootId;
+    },
+    [rootId]
+  );
+
+  useEffect(() => {
+    if (!selectedPath) {
+      if (!expanded.includes(rootId)) {
+        treeRef.current?.open(rootId, (ids) => updateExpanded(ids));
+      }
+      return;
+    }
+
+    const ancestorPaths = selectedPath
       .split('/')
       .filter(Boolean)
       .reduce<string[]>((acc, segment) => {
@@ -188,212 +221,47 @@ export const ExplorerView: React.FC<Props> = ({
         return acc;
       }, []);
 
-    setExpanded((prev) => {
-      const required = new Set<string>([rootId, ...ancestorIds]);
-      let changed = false;
-      const next = [...prev];
-      required.forEach((id) => {
-        if (!next.includes(id)) {
-          next.push(id);
-          changed = true;
-        }
+    const requiredIds = [rootId, ...ancestorPaths.map(pathToNodeId)];
+    const missing = requiredIds.filter((id) => !expanded.includes(id));
+    if (missing.length > 0) {
+      treeRef.current?.open(requiredIds, (ids) => updateExpanded(ids));
+    }
+  }, [selectedPath, rootId, expanded, updateExpanded, pathToNodeId]);
+
+  const { treeData, idToPathMap } = useMemo(() => {
+    const nodes: ExplorerNode[] = [];
+    const idToPath: FolderPathMap = new Map();
+
+    const visit = (node: FolderNode, parentId: string | number) => {
+      const nodeId = node.path || rootId;
+      idToPath.set(nodeId, node.path || '');
+      nodes.push({
+        id: nodeId,
+        parent: parentId,
+        text: node.title || node.name,
+        droppable: true,
+        data: node
       });
-      return changed ? next : prev;
-    });
-  }, [selectedPath, rootId]);
 
-  const FolderTreeItem: React.FC<{ node: FolderNode; depth: number; parentPath: string }> = ({
-    node,
-    depth,
-    parentPath
-  }) => {
-    const nodeId = node.path || rootId;
-    const folderPath = node.path || '';
-    const isRoot = depth === 0;
-    const paddingLeft = LABEL_PADDING_LEFT + depth * LEVEL_INDENT_WIDTH;
-    const groupStyles = !isRoot
-      ? {
-          marginLeft: 18,
-          paddingLeft: 16,
-          position: 'relative',
-          '&:before': {
-            content: '""',
-            position: 'absolute',
-            left: 6,
-            top: 0,
-            bottom: 8,
-            borderLeft: '1px solid rgba(140,150,160,0.45)'
-          }
-        }
-      : {
-          marginLeft: 18,
-          paddingLeft: 16
-        };
-    const mediaCount = node.children.filter((child) => child.type === 'media').length;
-
-    const { active } = useDndContext();
-    const activeType = (active?.data?.current as { type?: string } | undefined)?.type;
-    const isMediaDrag = activeType === 'media';
-
-    const { setNodeRef: setMediaDropRef, isOver: isMediaDropOver } = useDroppable({
-      id: `media-target:${nodeId}`,
-      data: { type: 'folder', path: folderPath }
-    });
-
-    const {
-      setNodeRef: setSortableRef,
-      attributes,
-      listeners,
-      transform,
-      transition,
-      isDragging
-    } = useSortable({
-      id: nodeId,
-      data: { type: 'folder-node', path: folderPath, parent: parentPath },
-      disabled: isRoot
-    });
-
-    const combinedRef = useCallback(
-      (element: HTMLElement | null) => {
-        setSortableRef(element);
-        setMediaDropRef(element);
-      },
-      [setSortableRef, setMediaDropRef]
-    );
-
-    const sortableStyle = isRoot
-      ? undefined
-      : ({
-          transform: CSS.Transform.toString(transform),
-          transition,
-          cursor: isDragging ? 'grabbing' : 'grab'
-        } as React.CSSProperties);
-
-    const childFolders = useMemo(() => {
       const folders = node.children.filter((child): child is FolderNode => child.type === 'folder');
-      if (folders.length === 0) return [] as FolderNode[];
-      const orderedPaths = getOrderedPaths(folderPath, folders);
+      if (folders.length === 0) {
+        return;
+      }
+      const orderedPaths = getOrderedPaths(node.path || '', folders);
       const map = new Map(folders.map((child) => [child.path || '', child]));
-      const ordered: FolderNode[] = [];
       orderedPaths.forEach((path) => {
-        const entry = map.get(path);
-        if (entry) {
-          ordered.push(entry);
+        const child = map.get(path);
+        if (child) {
+          visit(child, nodeId);
           map.delete(path);
         }
       });
-      map.forEach((remaining) => ordered.push(remaining));
-      return ordered;
-    }, [node.children, folderPath, getOrderedPaths]);
+      map.forEach((child) => visit(child, nodeId));
+    };
 
-    return (
-      <TreeItem
-        key={nodeId}
-        itemId={nodeId}
-        sx={{
-          '& .MuiTreeItem-content': {
-            py: ROW_CONTENT_VERTICAL_PADDING,
-            px: 0,
-            alignItems: 'center'
-          },
-          '& .MuiTreeItem-iconContainer': {
-            minWidth: 16,
-            width: 16,
-            mr: TOGGLE_ICON_GAP,
-            alignItems: 'center',
-            justifyContent: 'center'
-          },
-          '& > .MuiTreeItem-group': groupStyles
-        }}
-        label={
-          <Stack
-            ref={combinedRef}
-            direction="row"
-            alignItems="center"
-            spacing={1.25}
-            justifyContent="space-between"
-            sx={{
-              flex: 1,
-              pr: 1,
-              pl: `${paddingLeft}px`,
-              py: ROW_VERTICAL_PADDING,
-              borderRadius: 1,
-              transition: 'background-color 120ms ease, border 120ms ease, opacity 120ms ease',
-              border:
-                (isMediaDropOver && isMediaDrag) || isDragging
-                  ? '1px solid rgba(61, 111, 217, 0.55)'
-                  : '1px solid transparent',
-              bgcolor: isMediaDropOver && isMediaDrag ? 'rgba(61,111,217,0.12)' : 'transparent',
-              opacity: isDragging ? 0.65 : 1
-            }}
-            style={sortableStyle}
-            onDoubleClick={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              onSelect(folderPath);
-              onEditFolder();
-            }}
-            onTouchEnd={(event) => {
-              if (event.touches.length > 0) return;
-              const now = Date.now();
-              if (lastTouchRef.current.path === folderPath && now - lastTouchRef.current.time < 350) {
-                event.preventDefault();
-                event.stopPropagation();
-                onSelect(folderPath);
-                onEditFolder();
-                lastTouchRef.current = { time: 0, path: undefined };
-              } else {
-                lastTouchRef.current = { time: now, path: folderPath };
-              }
-            }}
-            {...attributes}
-            {...listeners}
-          >
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ flex: 1, minWidth: 0 }}>
-              {iconForFolder(node)}
-              <Typography
-                variant="body2"
-                noWrap
-                sx={{ fontWeight: node.path === selectedPath ? 700 : 500, color: 'text.primary' }}
-              >
-                {node.title || node.name}
-              </Typography>
-            </Stack>
-            {mediaCount > 0 && (
-              <Avatar
-                sx={{
-                  width: 24,
-                  height: 24,
-                  fontSize: '0.7rem',
-                  bgcolor: 'rgba(145,158,171,0.24)',
-                  color: 'rgba(71,79,98,0.9)',
-                  fontWeight: 600
-                }}
-              >
-                {mediaCount}
-              </Avatar>
-            )}
-          </Stack>
-        }
-      >
-        {childFolders.length > 0 && (
-          <SortableContext
-            items={childFolders.map((child) => child.path || `${folderPath}/${child.name}`)}
-            strategy={verticalListSortingStrategy}
-          >
-            {childFolders.map((child) => (
-              <FolderTreeItem
-                key={child.path || child.name}
-                node={child}
-                depth={depth + 1}
-                parentPath={folderPath}
-              />
-            ))}
-          </SortableContext>
-        )}
-      </TreeItem>
-    );
-  };
+    visit(tree, VIRTUAL_ROOT_ID);
+    return { treeData: nodes, idToPathMap: idToPath };
+  }, [tree, rootId, getOrderedPaths]);
 
   const handleCreate = () => {
     const trimmed = newFolderName.trim();
@@ -417,51 +285,45 @@ export const ExplorerView: React.FC<Props> = ({
     return count;
   }, [tree]);
 
-  useDndMonitor({
-    onDragEnd: ({ active, over }) => {
-      const activeData = active.data?.current as
-        | { type?: string; path?: string; parent?: string }
-        | undefined;
-      if (activeData?.type !== 'folder-node' || !activeData.path || activeData.parent === undefined) {
+  const handleDrop = useCallback(
+    (newTree: ExplorerNode[], options: DropOptions<FolderNode>) => {
+      const dragSource = options.dragSource;
+      if (!dragSource?.data?.path) {
         return;
       }
 
-      const parentPath = activeData.parent;
+      const sourceParentId = dragSource.parent;
+      if (sourceParentId === undefined || sourceParentId === null) {
+        return;
+      }
 
-      if (!over) {
+      const updatedSource = newTree.find((node) => node.id === dragSource.id);
+      if (!updatedSource || updatedSource.parent !== sourceParentId) {
+        const parentPathFallback = idToPathMap.get(sourceParentId) ?? '';
         setPendingOrders((prev) => {
-          if (!prev[parentPath]) return prev;
+          if (!prev[parentPathFallback]) return prev;
           const next = { ...prev };
-          delete next[parentPath];
+          delete next[parentPathFallback];
           return next;
         });
         return;
       }
 
-      const overData = over.data?.current as
-        | { type?: string; path?: string; parent?: string }
-        | undefined;
-      if (overData?.type !== 'folder-node' || !overData.path || overData.parent !== parentPath) {
-        setPendingOrders((prev) => {
-          if (!prev[parentPath]) return prev;
-          const next = { ...prev };
-          delete next[parentPath];
-          return next;
-        });
-        return;
-      }
-
+      const parentPath = idToPathMap.get(sourceParentId) ?? '';
       const siblings = folderChildrenMap.get(parentPath) ?? [];
-      if (siblings.length === 0) return;
-
-      const currentOrder = getOrderedPaths(parentPath, siblings);
-      const fromIndex = currentOrder.indexOf(activeData.path);
-      const toIndex = currentOrder.indexOf(overData.path);
-      if (fromIndex === -1 || toIndex === -1 || fromIndex === toIndex) {
+      if (siblings.length === 0) {
         return;
       }
 
-      const nextOrder = arrayMove(currentOrder, fromIndex, toIndex);
+      const siblingNodes = newTree.filter((node) => node.parent === sourceParentId);
+      if (siblingNodes.length === 0) {
+        return;
+      }
+
+      const nextOrder = siblingNodes
+        .map((node) => node.data?.path || (typeof node.id === 'string' ? (node.id === rootId ? '' : node.id) : String(node.id)))
+        .filter((value): value is string => typeof value === 'string');
+
       const baseOrder = siblings.map((child) => child.path || '');
 
       setPendingOrders((prev) => {
@@ -478,25 +340,143 @@ export const ExplorerView: React.FC<Props> = ({
         onReorderFolders?.(parentPath, nextOrder);
       }
     },
-    onDragCancel: ({ active }) => {
-      const activeData = active.data?.current as
-        | { type?: string; parent?: string }
-        | undefined;
-      if (activeData?.type !== 'folder-node' || activeData.parent === undefined) {
-        return;
-      }
-      const parentPath = activeData.parent;
-      setPendingOrders((prev) => {
-        if (!prev[parentPath]) return prev;
-        const next = { ...prev };
-        delete next[parentPath];
-        return next;
-      });
-    }
-  });
+    [folderChildrenMap, idToPathMap, isSameOrder, onReorderFolders, rootId]
+  );
 
   const hasSelection = selectedPath !== undefined && selectedPath !== null;
   const targetLabel = hasSelection && selectedPath ? selectedPath : 'la racine';
+
+  const ExplorerTreeNode: React.FC<{ node: ExplorerNode; params: RenderParams }> = ({ node, params }) => {
+    const folder = node.data ?? tree;
+    const folderPath = folder.path || '';
+    const isRoot = node.id === rootId;
+    const paddingLeft = LABEL_PADDING_LEFT + params.depth * LEVEL_INDENT_WIDTH;
+    const mediaCount = folder.children.filter((child) => child.type === 'media').length;
+
+    const { active } = useDndContext();
+    const activeType = (active?.data?.current as { type?: string } | undefined)?.type;
+    const isMediaDrag = activeType === 'media';
+
+    const { setNodeRef: setMediaDropRef, isOver: isMediaDropOver } = useDroppable({
+      id: `media-target:${node.id}`,
+      data: { type: 'folder', path: folderPath }
+    });
+
+    const combinedRef = useCallback(
+      (element: HTMLElement | null) => {
+        if (params.containerRef) {
+          (params.containerRef as React.MutableRefObject<HTMLElement | null>).current = element;
+        }
+        setMediaDropRef(element);
+      },
+      [params.containerRef, setMediaDropRef]
+    );
+
+    const handleRef = useCallback(
+      (element: HTMLDivElement | null) => {
+        if (params.handleRef) {
+          (params.handleRef as React.MutableRefObject<HTMLDivElement | null>).current = element;
+        }
+      },
+      [params.handleRef]
+    );
+
+    const isSelected = folderPath ? folderPath === selectedPath : !selectedPath;
+    const isDropHighlight = params.isDropTarget || (isMediaDrag && isMediaDropOver);
+
+    return (
+      <Box
+        ref={combinedRef}
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 1.25,
+          pr: 1,
+          pl: `${paddingLeft}px`,
+          py: ROW_VERTICAL_PADDING,
+          borderRadius: 1,
+          transition: 'background-color 120ms ease, border 120ms ease, opacity 120ms ease',
+          border: isDropHighlight ? '1px solid rgba(61, 111, 217, 0.55)' : '1px solid transparent',
+          bgcolor: isDropHighlight ? 'rgba(61,111,217,0.12)' : 'transparent',
+          opacity: params.isDragging ? 0.65 : 1,
+          cursor: isRoot ? 'default' : params.isDragging ? 'grabbing' : 'grab'
+        }}
+        onClick={() => {
+          onSelect(folderPath);
+        }}
+        onDoubleClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onSelect(folderPath);
+          onEditFolder();
+        }}
+        onTouchEnd={(event) => {
+          if (event.touches.length > 0) return;
+          const now = Date.now();
+          if (lastTouchRef.current.path === folderPath && now - lastTouchRef.current.time < 350) {
+            event.preventDefault();
+            event.stopPropagation();
+            onSelect(folderPath);
+            onEditFolder();
+            lastTouchRef.current = { time: 0, path: undefined };
+          } else {
+            lastTouchRef.current = { time: now, path: folderPath };
+          }
+        }}
+      >
+        <Box
+          component="span"
+          sx={{
+            width: 16,
+            mr: TOGGLE_ICON_GAP,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: accentColor,
+            cursor: params.hasChild ? 'pointer' : 'default'
+          }}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (params.hasChild) {
+              params.onToggle();
+            }
+          }}
+        >
+          {params.hasChild ? (params.isOpen ? <CollapseIcon /> : <ExpandIcon />) : <LeafPlaceholder />}
+        </Box>
+        <Stack
+          ref={handleRef}
+          direction="row"
+          alignItems="center"
+          spacing={1.25}
+          justifyContent="space-between"
+          sx={{ flex: 1, minWidth: 0 }}
+        >
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ flex: 1, minWidth: 0 }}>
+            {iconForFolder(folder)}
+            <Typography variant="body2" noWrap sx={{ fontWeight: isSelected ? 700 : 500, color: 'text.primary' }}>
+              {folder.title || folder.name}
+            </Typography>
+          </Stack>
+          {mediaCount > 0 && (
+            <Avatar
+              sx={{
+                width: 24,
+                height: 24,
+                fontSize: '0.7rem',
+                bgcolor: 'rgba(145,158,171,0.24)',
+                color: 'rgba(71,79,98,0.9)',
+                fontWeight: 600
+              }}
+            >
+              {mediaCount}
+            </Avatar>
+          )}
+        </Stack>
+      </Box>
+    );
+  };
 
   return (
     <Stack spacing={2} sx={{ height: '100%' }}>
@@ -526,26 +506,19 @@ export const ExplorerView: React.FC<Props> = ({
           </Button>
         </Stack>
       </Stack>
-      <SimpleTreeView
-        aria-label="explorateur"
-        slots={{ collapseIcon: CollapseIcon, expandIcon: ExpandIcon, endIcon: LeafPlaceholder }}
-        expandedItems={expanded}
-        onExpandedItemsChange={(_event, itemIds) => {
-          const normalized = Array.isArray(itemIds) ? itemIds.map((id) => (typeof id === 'string' ? id : String(id))) : [];
-          setExpanded(Array.from(new Set([rootId, ...normalized])));
-        }}
-        selectedItems={selectedPath || rootId}
-        onSelectedItemsChange={(_event, itemId) => {
-          if (typeof itemId === 'string') {
-            onSelect(itemId === rootId ? '' : itemId);
-          }
-        }}
-        sx={{ flex: 1, overflowY: 'auto', pr: 1 }}
-      >
-        <SortableContext items={[tree.path || rootId]} strategy={verticalListSortingStrategy}>
-          <FolderTreeItem node={tree} depth={0} parentPath="" />
-        </SortableContext>
-      </SimpleTreeView>
+      <DndProvider backend={MultiBackend} options={backendOptions}>
+        <Tree
+          ref={treeRef}
+          tree={treeData}
+          rootId={VIRTUAL_ROOT_ID}
+          sort={false}
+          canDrag={(node) => (node ? node.id !== rootId : true)}
+          onChangeOpen={(ids) => updateExpanded(ids)}
+          initialOpen={expanded}
+          onDrop={handleDrop}
+          render={(node, params) => <ExplorerTreeNode node={node} params={params} />}
+        />
+      </DndProvider>
       <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} fullWidth maxWidth="xs">
         <DialogTitle>Nouveau dossier</DialogTitle>
         <DialogContent sx={{ pt: 2 }}>
